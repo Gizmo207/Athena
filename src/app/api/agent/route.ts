@@ -2,6 +2,7 @@ console.log('Loaded /api/agent route');
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 
+console.log('OPENAI_API_KEY:', process.env.OPENAI_API_KEY?.slice(0, 5) + '...' || 'undefined');
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export async function POST(request: Request) {
@@ -25,6 +26,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ output });
   } catch (error: any) {
     console.error('OpenAI error:', error);
-    return NextResponse.json({ error: error.message || 'OpenAI error' }, { status: 500 });
+    console.error('Error type:', typeof error);
+    console.error('Error string:', String(error));
+    if (error && error.stack) {
+      console.error('Error stack:', error.stack);
+    }
+    return NextResponse.json({ error: error?.message || String(error) || 'OpenAI error' }, { status: 500 });
   }
 }
