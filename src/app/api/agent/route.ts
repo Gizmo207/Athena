@@ -4,7 +4,9 @@ import OpenAI from 'openai';
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export async function POST(request: Request) {
-  const { prompt } = await request.json();
+  const body = await request.json();
+  console.log('Received body:', body);
+  const { prompt } = body;
   if (!prompt) {
     return NextResponse.json({ error: 'No prompt provided' }, { status: 400 });
   }
