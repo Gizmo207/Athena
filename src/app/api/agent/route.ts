@@ -1,3 +1,4 @@
+console.log('Loaded /api/agent route');
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 
