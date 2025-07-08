@@ -52,7 +52,7 @@ export default function Chat() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ message: message.trim() }),
+        body: JSON.stringify({ prompt: message.trim() }),
       });
 
       if (!response.ok) {
