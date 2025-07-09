@@ -71,9 +71,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     promptParts.push(athenaPrompt);
     promptParts.push('');
     if (memoryContext) {
-      promptParts.push('📚 LONG-TERM MEMORY:');
+      promptParts.push('📚 LONG-TERM MEMORY (retrieved facts):');
       promptParts.push(memoryContext);
       promptParts.push('');
+      console.log('✅ Memory context injected into prompt');
+    } else {
+      console.log('ℹ️ No memory context found');
     }
     if (recentSummaries.length > 0) {
       promptParts.push('📝 RECENT SESSION SUMMARIES:');
