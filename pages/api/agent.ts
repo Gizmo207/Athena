@@ -3,12 +3,12 @@ import { Ollama } from '@langchain/community/llms/ollama';
 import { FaissStore } from '@langchain/community/vectorstores/faiss';
 import { OllamaEmbeddings } from '@langchain/community/embeddings/ollama';
 import { Document } from 'langchain/document';
-import { StringOutputParser } from 'langchain/schema/output_parser';
+import { StringOutputParser } from '@langchain/core/output_parsers';
 import {
   RunnableSequence,
   RunnablePassthrough,
-} from 'langchain/schema/runnable';
-import { PromptTemplate } from 'langchain/prompts';
+} from '@langchain/core/runnables';
+import { PromptTemplate } from '@langchain/core/prompts';
 import path from 'path';
 import fs from 'fs';
 
@@ -89,8 +89,8 @@ export default async function handler(
     // --- RAG CHAIN ---
     const chain = RunnableSequence.from([
       {
-        context: retriever.pipe((docs) =>
-          docs.map((d) => d.pageContent).join('\n')
+        context: retriever.pipe((docs: Document[]) =>
+          docs.map((d: Document) => d.pageContent).join('\n')
         ),
         question: new RunnablePassthrough(),
       },
