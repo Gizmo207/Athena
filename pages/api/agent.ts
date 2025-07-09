@@ -1,21 +1,14 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { Ollama } from '@langchain/ollama';
 import athenaPrompt from '../../prompts/athena'; // Modular prompt loading
-import { OllamaEmbeddings } from '@langchain/ollama';
-import { HNSWLib } from '@langchain/community/vectorstores/hnswlib';
 import { Document } from '@langchain/core/documents';
-import { RunnableSequence, RunnablePassthrough } from '@langchain/core/runnables';
-import { ChatPromptTemplate } from '@langchain/core/prompts';
-import { StringOutputParser } from '@langchain/core/output_parsers';
 import { ConversationSummaryBufferMemory } from 'langchain/memory';
-import path from 'path';
-import fs from 'fs';
 import { AthenaMemoryManager } from '../../lib/memory/AthenaMemoryManager';
 import { sanitizeDates } from '../../lib/utils/dateSanitizer';
 import { storeConversationSummary, getRecentSummaries } from '../../lib/memory/conversationLogger';
+import { getChromaStore } from '../../lib/vectorstore/chroma';
 
 // Configuration
-const VECTOR_STORE_PATH = path.join(process.cwd(), 'athena-vectorstore');
 const OLLAMA_BASE_URL = 'http://localhost:11434';
 const OLLAMA_MODEL = 'mistral:instruct';
 
@@ -26,110 +19,12 @@ const llm = new Ollama({
   temperature: 0.7,
 });
 
-const embeddings = new OllamaEmbeddings({
-  baseUrl: OLLAMA_BASE_URL,
-  model: OLLAMA_MODEL,
-});
-
-// Global vector store instance
-let vectorStore: HNSWLib | null = null;
-
 // Conversation memory for short-term context
 const conversationMemory = new ConversationSummaryBufferMemory({
   llm: llm,
   maxTokenLimit: 1000,
   returnMessages: true,
 });
-
-// Initialize or load vector store
-async function getVectorStore() {
-  if (vectorStore) {
-    return vectorStore;
-  }
-
-  try {
-    if (fs.existsSync(VECTOR_STORE_PATH)) {
-      console.log('✅ Loading existing vector store...');
-      vectorStore = await HNSWLib.load(VECTOR_STORE_PATH, embeddings);
-    } else {
-      console.log('✨ Creating new vector store...');
-      // Create with initial document
-      const initDoc = new Document({ 
-        pageContent: `I am ATHENA, an Intelligent Overseer Agent designed to coordinate multiple AI systems, manage complex projects, and provide strategic insights. 
-        
-        My core capabilities include:
-        - Strategic planning and problem decomposition
-        - Multi-agent coordination and orchestration  
-        - Long-term memory and context retention
-        - Project management and workflow optimization
-        - Research synthesis and decision support
-        - Task automation and process improvement
-        
-        I maintain a professional demeanor while being approachable and helpful. I excel at breaking down complex challenges into manageable components and coordinating resources to achieve optimal outcomes.`,
-        metadata: { timestamp: new Date().toISOString(), type: 'core_identity' }
-      });
-      vectorStore = await HNSWLib.fromDocuments([initDoc], embeddings);
-      await vectorStore.save(VECTOR_STORE_PATH);
-    }
-  } catch (error) {
-    console.error('Error with vector store:', error);
-    // Fallback: create new store
-    const initDoc = new Document({ 
-      pageContent: 'I am ATHENA, an Intelligent Overseer Agent specializing in strategic coordination and multi-agent management.',
-      metadata: { timestamp: new Date().toISOString(), type: 'core_identity' }
-    });
-    vectorStore = await HNSWLib.fromDocuments([initDoc], embeddings);
-  }
-
-  return vectorStore;
-}
-
-// Format retrieved documents for context
-function formatDocs(docs: Document[]): string {
-  return docs.map(doc => `[${doc.metadata.timestamp}] ${doc.pageContent}`).join('\n\n');
-}
-
-// Create the RAG chain using modular Athena persona and memory
-async function createRAGChain(customSystemPrompt?: string, sessionContext?: string) {
-  const store = await getVectorStore();
-  const retriever = store.asRetriever({ k: 5 });
-
-  const template = customSystemPrompt || `[INST]
-${athenaPrompt}
-
-📚 CONTEXTUAL MEMORY:
-{context}
-
-Recent conversation history:
-{chat_history}
-
-Additional session context:
-{session_context}
-
-Current message: {question} [/INST]`;
-  const prompt = ChatPromptTemplate.fromTemplate(template);
-
-  const chain = RunnableSequence.from([
-    {
-      context: retriever.pipe(formatDocs),
-      question: new RunnablePassthrough(),
-      chat_history: () => {
-        const raw = conversationMemory.chatHistory;
-        if (Array.isArray(raw)) {
-          return raw.map(m => `${m.role}: ${m.content}`).join('\n');
-        } else if (typeof raw === 'string') {
-          return raw;
-        }
-        return '';
-      },
-      session_context: () => sessionContext || '',
-    },
-    prompt,
-    llm,
-    new StringOutputParser(),
-  ]);
-  return chain;
-}
 
 // Initialize memory manager
 const memoryManager = new AthenaMemoryManager();
@@ -154,11 +49,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.log(`� History length: ${history.length} messages`);
 
     // Step 1: Detect and store new factual memories
-    if (/my favorite color is/i.test(message)) {
-      await memoryManager.addFact('user', message);
-    }
+    await memoryManager.addFact('user', message);
 
-    // --- NEW: Retrieve recent conversation summaries ---
+    // --- Retrieve recent conversation summaries ---
     let recentSummaries: string[] = [];
     try {
       recentSummaries = await getRecentSummaries('user', 3);
@@ -166,7 +59,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       console.warn('Could not retrieve recent summaries:', err);
     }
 
-    // --- NEW: Build full prompt using Athena persona, memory, and summaries ---
+    // --- Build full prompt using Athena persona, memory, and summaries ---
     const historyArray = history;
     const memoryContext = await memoryManager.getMemoryContext(message);
     const promptParts: string[] = [];
@@ -174,11 +67,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     promptParts.push(athenaPrompt);
     promptParts.push('');
     if (memoryContext) {
+      promptParts.push('📚 LONG-TERM MEMORY:');
       promptParts.push(memoryContext);
       promptParts.push('');
     }
     if (recentSummaries.length > 0) {
-      promptParts.push('Recent session summaries:');
+      promptParts.push('📝 RECENT SESSION SUMMARIES:');
       recentSummaries.forEach((s, i) => promptParts.push(`Summary ${i + 1}: ${s}`));
       promptParts.push('');
     }
@@ -209,7 +103,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Sanitize dates in Athena's response
     response = sanitizeDates(response, knownDates);
 
-    // --- NEW: Generate and store a session summary ---
+    // --- Generate and store a session summary ---
     try {
       // Simple summary: use the last 4 messages for context
       const summaryText = historyArray.slice(-4).map((m: any) => `${m.role}: ${m.content}`).join(' | ') + ` | user: ${message} | agent: ${response}`;
@@ -224,8 +118,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       { output: response }
     );
 
-    // Save to vector store for long-term memory
-    const store = await getVectorStore();
+    // Save to Chroma vector store for long-term memory
+    const store = await getChromaStore();
     const conversationDoc = new Document({
       pageContent: `User: ${message}\nATHENA: ${response}`,
       metadata: {
@@ -238,9 +132,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
 
     await store.addDocuments([conversationDoc]);
-    await store.save(VECTOR_STORE_PATH);
-
-    console.log('💾 Conversation saved to long-term memory');
+    console.log('💾 Conversation saved to Chroma long-term memory');
 
     return res.status(200).json({ reply: response });
 
