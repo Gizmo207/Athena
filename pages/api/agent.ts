@@ -11,6 +11,7 @@ import { ConversationSummaryBufferMemory } from 'langchain/memory';
 import path from 'path';
 import fs from 'fs';
 import { AthenaMemoryManager } from '../../lib/memory/AthenaMemoryManager';
+import { sanitizeDates } from '../../lib/utils/dateSanitizer';
 
 // Configuration
 const VECTOR_STORE_PATH = path.join(process.cwd(), 'athena-vectorstore');
@@ -177,8 +178,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const promptText = promptParts.join('\n');
     console.log('🤖 Invoking LLM with full prompt...');
     // Call the Ollama LLM with the assembled prompt
-    const response = await llm.call(promptText);
+
+    let response = await llm.call(promptText);
     console.log('✅ Agent response generated');
+
+    // Gather known dates from memory for date sanitization
+    let knownDates: string[] = [];
+    try {
+      const facts = await memoryManager.showMemory();
+      knownDates = facts
+        .filter(f => /date|birthday|anniversary|event/i.test(f.key) && f.value)
+        .map(f => f.value);
+    } catch (err) {
+      console.warn('Could not retrieve known dates for sanitization:', err);
+    }
+
+    // Sanitize dates in Athena's response
+    response = sanitizeDates(response, knownDates);
 
     // Save conversation to memory with agent info
     await conversationMemory.saveContext(
