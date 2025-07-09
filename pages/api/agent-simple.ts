@@ -1,17 +1,33 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { Ollama } from '@langchain/ollama';
 import athenaPrompt from '../../prompts/athena'; // Modular prompt loading
+import { Document } from '@langchain/core/documents';
+import { ConversationSummaryBufferMemory } from 'langchain/memory';
+import { AthenaMemoryManager } from '../../lib/memory/AthenaMemoryManager';
+import { sanitizeDates } from '../../lib/utils/dateSanitizer';
+import { storeConversationSummary, getRecentSummaries } from '../../lib/memory/conversationLogger';
+import { getChromaStore } from '../../lib/vectorstore/chroma';
 
 // Configuration
 const OLLAMA_BASE_URL = 'http://localhost:11434';
 const OLLAMA_MODEL = 'mistral:instruct';
 
-// Initialize Ollama LLM
+// Initialize models
 const llm = new Ollama({
   baseUrl: OLLAMA_BASE_URL,
   model: OLLAMA_MODEL,
   temperature: 0.7,
 });
+
+// Conversation memory for short-term context
+const conversationMemory = new ConversationSummaryBufferMemory({
+  llm: llm,
+  maxTokenLimit: 1000,
+  returnMessages: true,
+});
+
+// Initialize memory manager
+const memoryManager = new AthenaMemoryManager();
 
 // Main API handler (modular, strict, future-proofed)
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -19,7 +35,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  console.log('🚀 Athena Simple API called');
+  console.log('🚀 Athena RAG API called');
 
   try {
     // Expect message and full chat history from client
@@ -29,43 +45,103 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'Invalid message provided' });
     }
 
-    console.log(`📦 Processing message: ${message}`);
-    console.log(`📚 History length: ${history.length} messages`);
+    console.log(`📦 Processing message: "${message}"`);
+    console.log(`📜 History length: ${history.length} messages`);
 
-    // Build simple prompt using Athena persona and provided history
+    // Step 1: Detect and store new factual memories
+    console.log('🧠 Step 1: Extracting and storing facts...');
+    await memoryManager.addFact('user', message);
+
+    // --- Retrieve recent conversation summaries ---
+    console.log('📝 Step 2: Retrieving recent summaries...');
+    let recentSummaries: string[] = [];
+    try {
+      recentSummaries = await getRecentSummaries('user', 3);
+      console.log(`📋 Found ${recentSummaries.length} recent summaries`);
+    } catch (err) {
+      console.warn('Could not retrieve recent summaries:', err);
+    }
+
+    // --- Build full prompt using Athena persona, memory, and summaries ---
+    console.log('🧠 Step 3: Building memory context...');
+    const historyArray = history;
+    const memoryContext = await memoryManager.getMemoryContext(message);
     const promptParts: string[] = [];
     promptParts.push('[INST]');
     promptParts.push(athenaPrompt);
     promptParts.push('');
-    
-    // Add recent conversation history
-    history.forEach((m: { role: string; content: string }) => {
+    if (memoryContext) {
+      promptParts.push('📚 LONG-TERM MEMORY (retrieved facts):');
+      promptParts.push(memoryContext);
+      promptParts.push('');
+      console.log('✅ Memory context injected into prompt');
+    } else {
+      console.log('ℹ️ No memory context found');
+    }
+    if (recentSummaries.length > 0) {
+      promptParts.push('📝 RECENT SESSION SUMMARIES:');
+      recentSummaries.forEach((s, i) => promptParts.push(`Summary ${i + 1}: ${s}`));
+      promptParts.push('');
+    }
+    historyArray.forEach((m: { role: string; content: string }) => {
       promptParts.push(`${m.role}: ${m.content}`);
     });
-    
     promptParts.push('');
     promptParts.push(`User: ${message}`);
     promptParts.push('[/INST]');
-    
     const promptText = promptParts.join('\n');
+    console.log('🤖 Invoking LLM with full prompt...');
     
-    console.log('🤖 Invoking LLM...');
-    console.log('📝 Prompt preview:', promptText.substring(0, 200) + '...');
-    
-    // Call the Ollama LLM
-    const response = await llm.call(promptText);
-    
+    // Call the Ollama LLM with the assembled prompt
+    let response = await llm.call(promptText);
     console.log('✅ Agent response generated');
-    console.log('📤 Response preview:', response.substring(0, 100) + '...');
+
+    // Gather known dates from memory for date sanitization
+    let knownDates: string[] = [];
+    try {
+      const facts = await memoryManager.showMemory();
+      knownDates = facts
+        .filter(f => /date|birthday|anniversary|event/i.test(f.key) && f.value)
+        .map(f => f.value);
+    } catch (err) {
+      console.warn('Could not retrieve known dates for sanitization:', err);
+    }
+
+    // Sanitize dates in Athena's response
+    response = sanitizeDates(response, knownDates);
+
+    // --- Generate and store a session summary ---
+    try {
+      // Simple summary: use the last 4 messages for context
+      const summaryText = historyArray.slice(-4).map((m: any) => `${m.role}: ${m.content}`).join(' | ') + ` | user: ${message} | agent: ${response}`;
+      await storeConversationSummary('user', summaryText, new Date().toISOString());
+    } catch (err) {
+      console.warn('Could not store conversation summary:', err);
+    }
+
+    // Save conversation to memory with agent info
+    await conversationMemory.saveContext(
+      { input: message },
+      { output: response }
+    );
+
+    console.log('💾 Response completed and saved to short-term memory');
 
     return res.status(200).json({ reply: response });
 
   } catch (error: any) {
     console.error('💥 API Error:', error);
-    console.error('💥 Error stack:', error.stack);
-    return res.status(500).json({
+    
+    // Handle specific errors
+    if (error.code === 'ECONNREFUSED' || error.message.includes('ECONNREFUSED')) {
+      return res.status(503).json({ 
+        error: 'Cannot connect to Ollama. Please ensure Ollama is running on port 11434.' 
+      });
+    }
+
+    // Return actual error message for debugging
+    return res.status(500).json({ 
       error: error.message || 'Internal server error',
-      details: error.stack || 'No stack trace available',
     });
   }
 }
