@@ -1,6 +1,16 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { Ollama } from '@langchain/ollama';
 import athenaPrompt from '../../prompts/athena'; // Modular prompt loading
+import { OllamaEmbeddings } from '@langchain/ollama';
+import { HNSWLib } from '@langchain/community/vectorstores/hnswlib';
+import { Document } from '@langchain/core/documents';
+import { RunnableSequence, RunnablePassthrough } from '@langchain/core/runnables';
+import { ChatPromptTemplate } from '@langchain/core/prompts';
+import { StringOutputParser } from '@langchain/core/output_parsers';
+import { ConversationSummaryBufferMemory } from 'langchain/memory';
+import path from 'path';
+import fs from 'fs';
+import { AthenaMemoryManager } from '../../lib/memory/AthenaMemoryManager';
 
 // Configuration
 const VECTOR_STORE_PATH = path.join(process.cwd(), 'athena-vectorstore');

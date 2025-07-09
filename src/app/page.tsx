@@ -35,7 +35,7 @@ export default function Home() {
 
   const handleSend = useCallback(async () => {
     if (!input.trim()) return;
-    const userMsg = { id: messageId.current++, message: input, sender: "user" };
+    const userMsg = { id: messageId.current++, message: input, sender: "user" as "user" };
     setMessages((msgs) => [...msgs, userMsg]);
     setLoading(true);
     const userText = input;
@@ -56,7 +56,7 @@ export default function Home() {
       const agentMsg = {
         id: messageId.current++,
         message: data.reply || "I apologize, but I couldn't generate a response.",
-        sender: "agent",
+        sender: "agent" as "agent",
       };
       setMessages((msgs) => [...msgs, agentMsg]);
     } catch (e) {
@@ -74,52 +74,13 @@ export default function Home() {
       setLoading(false);
     }
   }, [input, messages]);
-    setMessages((msgs) => [...msgs, userMsg]);
-    setLoading(true);
-    const userText = input;
-    setInput("");
-    
-    try {
-      const res = await fetch("/api/agent-simple", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          message: userText,
-          // Include recent conversation history for context
-          history: messages.slice(-4).map(m => ({ role: m.sender, content: m.message })),
-        }),
-      });
-      
-      if (!res.ok) {
-        throw new Error(`HTTP error! status: ${res.status}`);
-      }
-      
-      const data = await res.json();
-      const agentMsg = {
-        id: messageId.current++,
-        message: data.reply || "I apologize, but I couldn't generate a response.",
-        sender: "agent",
-      };
-      setMessages((msgs) => [...msgs, agentMsg]);
-      
-
-    } catch (e) {
-      console.error('Error:', e);
-      setMessages((msgs) => [
-        ...msgs,
-        { id: messageId.current++, message: "I'm having trouble connecting right now. Please ensure Ollama is running and try again.", sender: "agent" },
-      ]);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleAgentChange = useCallback((agent: Agent) => {
     setCurrentAgent(agent);
     // Add system message about agent switch
     const switchMsg = {
       id: messageId.current++,
-      message: `Switching to . `,
+      message: `Switching to ${agent.name}. ${agent.purpose || ""}`,
       sender: "system" as const,
     };
     setMessages((msgs) => [...msgs, switchMsg]);

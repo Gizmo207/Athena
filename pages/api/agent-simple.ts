@@ -63,18 +63,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   } catch (error: any) {
     console.error('💥 API Error:', error);
     console.error('💥 Error stack:', error.stack);
-    
-    // Handle specific errors
-    if (error.code === 'ECONNREFUSED' || error.message.includes('ECONNREFUSED')) {
-      return res.status(503).json({ 
-        error: 'Cannot connect to Ollama. Please ensure Ollama is running on port 11434.' 
-      });
-    }
-
-    // Return actual error message for debugging
-    return res.status(500).json({ 
+    return res.status(500).json({
       error: error.message || 'Internal server error',
-      details: error.stack || 'No stack trace available'
+      details: error.stack || 'No stack trace available',
     });
   }
 }
