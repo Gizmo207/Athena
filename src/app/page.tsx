@@ -39,15 +39,13 @@ export default function Home() {
     setInput("");
     
     try {
-      const res = await fetch("/api/agent", {
+      const res = await fetch("/api/agent-simple", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           message: userText,
-          agent: currentAgent.id,
-          systemPrompt: currentAgent.systemPrompt,
-          // Send recent conversation context for better flow
-          context: messages.slice(-4).map(m => `${m.sender}: ${m.message}`).join('\n')
+          // Include recent conversation history for context
+          history: messages.slice(-4).map(m => ({ role: m.sender, content: m.message })),
         }),
       });
       

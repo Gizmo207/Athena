@@ -1,16 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { Ollama } from '@langchain/ollama';
-import { OllamaEmbeddings } from '@langchain/ollama';
-import { HNSWLib } from '@langchain/community/vectorstores/hnswlib';
-import { Document } from '@langchain/core/documents';
-import { RunnableSequence, RunnablePassthrough } from '@langchain/core/runnables';
-import { ChatPromptTemplate } from '@langchain/core/prompts';
-import { StringOutputParser } from '@langchain/core/output_parsers';
-import { ConversationSummaryBufferMemory } from 'langchain/memory';
 import athenaPrompt from '../../prompts/athena';
-import path from 'path';
-import fs from 'fs';
-import { AthenaMemoryManager } from '../../lib/memory/AthenaMemoryManager';
 
 // Configuration
 const VECTOR_STORE_PATH = path.join(process.cwd(), 'athena-vectorstore');
@@ -176,8 +166,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     promptParts.push('[/INST]');
     const promptText = promptParts.join('\n');
     console.log('🤖 Invoking LLM with full prompt...');
-    const raw = await llm.invoke(promptText);
-    const response = raw as string;
+    // Call the Ollama LLM with the assembled prompt
+    const response = await llm.call(promptText);
     console.log('✅ Agent response generated');
 
     // Save conversation to memory with agent info

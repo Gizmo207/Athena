@@ -11,29 +11,43 @@ export class AthenaMemoryManager {
    * Add a user fact to long-term memory.
    */
   async addFact(userId: string, fact: string) {
-    const store = await this.storePromise;
-    const doc = new Document({
-      pageContent: fact,
-      metadata: { userId, timestamp: new Date().toISOString(), type: 'fact' },
-    });
-    await store.addDocuments([doc]);
+    try {
+      const store = await this.storePromise;
+      const doc = new Document({
+        pageContent: fact,
+        metadata: { userId, timestamp: new Date().toISOString(), type: 'fact' },
+      });
+      await store.addDocuments([doc]);
+    } catch (error: any) {
+      console.error('Error adding fact to memory store:', error);
+    }
   }
 
   /**
    * Retrieve top-k related facts for a query.
    */
   async getRelevantFacts(query: string, k = 5): Promise<string[]> {
-    const store = await this.storePromise;
-    // similaritySearch returns Documents
-    const docs = await store.similaritySearch(query, k);
-    return docs.map(doc => doc.pageContent);
+    try {
+      const store = await this.storePromise;
+      // similaritySearch returns Documents
+      const docs = await store.similaritySearch(query, k);
+      return docs.map(doc => doc.pageContent);
+    } catch (error: any) {
+      console.error('Error retrieving relevant facts:', error);
+      return [];
+    }
   }
 
   /**
    * Get formatted memory context for injection into prompts.
    */
   async getMemoryContext(query: string, k = 5): Promise<string> {
-    const facts = await this.getRelevantFacts(query, k);
-    return facts.join('\n');
+    try {
+      const facts = await this.getRelevantFacts(query, k);
+      return facts.join('\n');
+    } catch (error: any) {
+      console.error('Error building memory context:', error);
+      return '';
+    }
   }
 }
