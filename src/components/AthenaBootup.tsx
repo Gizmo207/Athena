@@ -51,16 +51,29 @@ export default function AthenaBootup({ onComplete }: { onComplete: () => void })
 
   return (
     <div 
-      className="fixed inset-0 z-50 flex flex-col items-center justify-center text-white"
       style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        zIndex: 50,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        color: 'white',
         background: 'linear-gradient(135deg, #0a0a0f, #1a1a2e, #16213e)',
         fontFamily: 'monospace'
       }}
     >
       {/* Main Athena Logo */}
       <div 
-        className="text-6xl font-bold mb-8 animate-pulse"
         style={{
+          fontSize: 48,
+          fontWeight: 'bold',
+          marginBottom: 32,
+          animation: 'pulse 2s infinite',
           color: '#00d4ff',
           textShadow: '0 0 20px rgba(0,212,255,0.5), 0 0 40px rgba(0,212,255,0.3)',
           letterSpacing: '0.2em'
@@ -70,18 +83,26 @@ export default function AthenaBootup({ onComplete }: { onComplete: () => void })
       </div>
 
       {/* Boot Status */}
-      <div className="text-xl mb-4" style={{ color: '#00ff88' }}>
+      <div style={{ fontSize: 20, marginBottom: 16, color: '#00ff88' }}>
         OVERSEER SYSTEM INITIALIZING...
       </div>
 
       {/* Progress Bar */}
       <div 
-        className="w-80 h-2 mb-6 rounded-full overflow-hidden"
-        style={{ backgroundColor: 'rgba(255,255,255,0.1)' }}
+        style={{
+          width: 320,
+          height: 8,
+          marginBottom: 24,
+          borderRadius: 9999,
+          overflow: 'hidden',
+          backgroundColor: 'rgba(255,255,255,0.1)'
+        }}
       >
         <div 
-          className="h-full transition-all duration-300 rounded-full"
-          style={{ 
+          style={{
+            height: '100%',
+            transition: 'all 0.3s',
+            borderRadius: 9999,
             width: `${Math.min(progress, 100)}%`,
             background: 'linear-gradient(90deg, #00d4ff, #00ff88)',
             boxShadow: '0 0 10px rgba(0,212,255,0.5)'
@@ -90,7 +111,15 @@ export default function AthenaBootup({ onComplete }: { onComplete: () => void })
       </div>
 
       {/* Boot Steps */}
-      <div className="text-sm space-y-1 mb-8 text-center" style={{ color: '#aaa' }}>
+      <div style={{ 
+        fontSize: 14, 
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 4,
+        marginBottom: 32,
+        textAlign: 'center',
+        color: '#aaa'
+      }}>
         <div>✓ Neural networks synchronized</div>
         <div>✓ Memory systems online</div>
         <div>✓ Command protocols loaded</div>
@@ -99,8 +128,11 @@ export default function AthenaBootup({ onComplete }: { onComplete: () => void })
 
       {/* Random Greeting */}
       <div 
-        className="text-lg italic text-center max-w-md"
-        style={{ 
+        style={{
+          fontSize: 18,
+          fontStyle: 'italic',
+          textAlign: 'center',
+          maxWidth: 448,
           color: '#00d4ff',
           textShadow: '0 0 10px rgba(0,212,255,0.3)'
         }}

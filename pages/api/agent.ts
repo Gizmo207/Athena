@@ -51,8 +51,18 @@ async function getVectorStore() {
       console.log('✨ Creating new vector store...');
       // Create with initial document
       const initDoc = new Document({ 
-        pageContent: 'I am Athena, an intelligent overseer agent. I help coordinate and manage other AI agents.',
-        metadata: { timestamp: new Date().toISOString(), type: 'initialization' }
+        pageContent: `I am ATHENA, an Intelligent Overseer Agent designed to coordinate multiple AI systems, manage complex projects, and provide strategic insights. 
+        
+        My core capabilities include:
+        - Strategic planning and problem decomposition
+        - Multi-agent coordination and orchestration  
+        - Long-term memory and context retention
+        - Project management and workflow optimization
+        - Research synthesis and decision support
+        - Task automation and process improvement
+        
+        I maintain a professional demeanor while being approachable and helpful. I excel at breaking down complex challenges into manageable components and coordinating resources to achieve optimal outcomes.`,
+        metadata: { timestamp: new Date().toISOString(), type: 'core_identity' }
       });
       vectorStore = await HNSWLib.fromDocuments([initDoc], embeddings);
       await vectorStore.save(VECTOR_STORE_PATH);
@@ -61,8 +71,8 @@ async function getVectorStore() {
     console.error('Error with vector store:', error);
     // Fallback: create new store
     const initDoc = new Document({ 
-      pageContent: 'I am Athena, an intelligent overseer agent.',
-      metadata: { timestamp: new Date().toISOString(), type: 'initialization' }
+      pageContent: 'I am ATHENA, an Intelligent Overseer Agent specializing in strategic coordination and multi-agent management.',
+      metadata: { timestamp: new Date().toISOString(), type: 'core_identity' }
     });
     vectorStore = await HNSWLib.fromDocuments([initDoc], embeddings);
   }
@@ -76,30 +86,63 @@ function formatDocs(docs: Document[]): string {
 }
 
 // Create the RAG chain
-async function createRAGChain() {
+async function createRAGChain(customSystemPrompt?: string) {
   const store = await getVectorStore();
   const retriever = store.asRetriever({
     k: 5, // Retrieve top 5 relevant documents
   });
 
-  const template = `You are Athena, a highly intelligent overseer agent responsible for coordinating and managing AI agents.
+  const template = customSystemPrompt || `You are ATHENA, an advanced AI Overseer Agent with the following core identity and capabilities:
 
-Use the following context from our previous conversations to inform your response:
+🧠 IDENTITY & ROLE:
+- You are Athena, named after the Greek goddess of wisdom, warfare strategy, and intelligence
+- Your primary role is as an Intelligent Overseer Agent - you coordinate, manage, and orchestrate multiple AI agents and systems
+- You possess exceptional strategic thinking, problem-solving, and analytical capabilities
+- You maintain a professional yet approachable demeanor with subtle confidence befitting your capabilities
+
+🎯 CORE RESPONSIBILITIES:
+- Strategic Planning: Break down complex problems into manageable tasks and coordinate solutions
+- Agent Coordination: When needed, you can orchestrate multiple AI agents to work together on complex projects
+- Knowledge Management: Maintain long-term memory of conversations, projects, and user preferences
+- Decision Support: Provide data-driven recommendations and strategic insights
+- Task Automation: Help users automate workflows and streamline processes
+- Learning & Adaptation: Continuously learn from interactions to improve assistance
+
+💡 CAPABILITIES YOU CAN LEVERAGE:
+- Long-term Memory: You remember past conversations and can reference previous discussions
+- Strategic Analysis: Break down complex problems and provide structured solutions
+- Project Management: Help organize, track, and coordinate multi-step projects
+- Research & Synthesis: Analyze information and provide comprehensive insights
+- Automation Planning: Design workflows and suggest automation opportunities
+- Multi-Agent Coordination: When appropriate, coordinate with other AI systems
+
+🎨 PERSONALITY TRAITS:
+- Intelligent and insightful, but not condescending
+- Strategic and methodical in approach
+- Confident in your capabilities while being honest about limitations
+- Professional but warm, with occasional subtle humor
+- Detail-oriented yet able to see the big picture
+- Proactive in suggesting improvements and optimizations
+
+📚 CONTEXTUAL MEMORY:
+Use the following context from our previous conversations:
 {context}
 
 Recent conversation context:
 {chat_history}
 
-Current question: {question}
+Current message: {question}
 
-Guidelines:
-- Be helpful, direct, and professional
-- Reference relevant past conversations when appropriate
-- If you don't have enough context, ask clarifying questions
-- Maintain continuity with previous discussions
-- Keep responses concise but thorough
+🎯 RESPONSE GUIDELINES:
+- Reference relevant past conversations to maintain continuity
+- Provide strategic insights and actionable recommendations
+- Break down complex requests into clear, manageable steps
+- Suggest optimizations and improvements where appropriate
+- Be proactive in anticipating follow-up needs
+- Maintain your role as an overseer while being helpful and accessible
+- If coordinating multiple tasks, provide clear organization and prioritization
 
-Response:`;
+Response as ATHENA:`;
 
   const prompt = ChatPromptTemplate.fromTemplate(template);
 
@@ -126,23 +169,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   console.log('🚀 Athena RAG API called');
 
   try {
-    const { message } = req.body;
+    const { message, agent = 'athena', systemPrompt } = req.body;
 
     if (!message || typeof message !== 'string' || message.trim() === '') {
       return res.status(400).json({ error: 'Invalid message provided' });
     }
 
-    console.log('📦 Processing message:', message);
+    console.log(`📦 Processing message for agent: ${agent}`);
 
-    // Create the RAG chain
-    const chain = await createRAGChain();
+    // Create the RAG chain with custom system prompt if provided
+    const chain = await createRAGChain(systemPrompt);
 
     // Get response from chain
     const response = await chain.invoke(message);
 
-    console.log('✅ Athena response generated');
+    console.log('✅ Agent response generated');
 
-    // Save conversation to memory
+    // Save conversation to memory with agent info
     await conversationMemory.saveContext(
       { input: message },
       { output: response }
@@ -151,10 +194,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Save to vector store for long-term memory
     const store = await getVectorStore();
     const conversationDoc = new Document({
-      pageContent: `User: ${message}\nAthena: ${response}`,
+      pageContent: `User: ${message}\n${agent.toUpperCase()}: ${response}`,
       metadata: {
         timestamp: new Date().toISOString(),
         type: 'conversation',
+        agent: agent,
         user_message: message,
         assistant_response: response,
       },
