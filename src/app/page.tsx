@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import AthenaBootup from "@/components/AthenaBootup";
 import AgentSwitcher, { Agent, AVAILABLE_AGENTS } from "@/components/AgentSwitcher";
 import VoiceControls from "@/components/VoiceControls";
@@ -78,11 +78,11 @@ export default function Home() {
     }
   };
 
-  const handleVoiceInput = (text: string) => {
+  const handleVoiceInput = useCallback((text: string) => {
     setInput(text);
-  };
+  }, []);
 
-  const handleAgentChange = (agent: Agent) => {
+  const handleAgentChange = useCallback((agent: Agent) => {
     setCurrentAgent(agent);
     // Add system message about agent switch
     const switchMsg = {
@@ -91,7 +91,11 @@ export default function Home() {
       sender: "system" as const
     };
     setMessages((msgs) => [...msgs, switchMsg]);
-  };
+  }, []);
+
+  const handleSpeakToggle = useCallback((enabled: boolean) => {
+    setVoiceSpeakEnabled(enabled);
+  }, []);
 
   return (
     <>
@@ -151,9 +155,14 @@ export default function Home() {
               paddingBottom: 20, 
               borderBottom: "2px solid rgba(0,212,255,0.3)" 
             }}>
-              <div className="flex justify-between items-start mb-4">
-                <div className="flex-1"></div>
-                <div className="flex-1">
+              <div className="flex justify-between items-center mb-4">
+                <div className="flex-1 flex justify-start">
+                  <AgentSwitcher 
+                    currentAgent={currentAgent}
+                    onAgentChange={handleAgentChange}
+                  />
+                </div>
+                <div className="flex-1 flex flex-col items-center">
                   <h1 style={{ 
                     color: "#00d4ff", 
                     margin: 0, 
@@ -164,21 +173,30 @@ export default function Home() {
                   }}>
                     {currentAgent.name}
                   </h1>
-                  <p style={{ 
-                    color: currentAgent.isOverseer ? "#00ff88" : "#00d4ff", 
-                    margin: "8px 0 0 0", 
-                    fontSize: 16,
-                    fontWeight: "500"
-                  }}>
-                    {currentAgent.purpose.toUpperCase()}
-                  </p>
+                  {/* Only show green subtitle for Athena */}
+                  {currentAgent.id === 'athena' && (
+                    <p style={{ 
+                      color: "#00ff88", 
+                      margin: "8px 0 0 0", 
+                      fontSize: 16,
+                      fontWeight: "500"
+                    }}>
+                      INTELLIGENT OVERSEER AGENT
+                    </p>
+                  )}
+                  {/* Show agent purpose for others */}
+                  {currentAgent.id !== 'athena' && (
+                    <p style={{ 
+                      color: "#00d4ff", 
+                      margin: "8px 0 0 0", 
+                      fontSize: 16,
+                      fontWeight: "500"
+                    }}>
+                      {currentAgent.purpose}
+                    </p>
+                  )}
                 </div>
-                <div className="flex-1 flex justify-end">
-                  <AgentSwitcher 
-                    currentAgent={currentAgent}
-                    onAgentChange={handleAgentChange}
-                  />
-                </div>
+                <div className="flex-1"></div>
               </div>
               <div style={{
                 color: "#aaa",
@@ -195,62 +213,66 @@ export default function Home() {
               height: 440, 
               overflowY: "auto", 
               marginBottom: 24, 
-              padding: "0 12px",
+              padding: 0,
               scrollbarWidth: "thin",
               scrollbarColor: "#00d4ff rgba(255,255,255,0.1)"
             }}>
-              {messages.map((msg) => (
-                <ChatBubble
-                  key={msg.id}
-                  message={msg.message}
-                  sender={msg.sender as 'user' | 'agent'}
-                  agentName={currentAgent.name}
-                />
-              ))}
-              {loading && (
-                <ChatBubble
-                  message="Processing your request..."
-                  sender="agent"
-                  agentName={currentAgent.name}
-                >
-                  <div style={{
-                    fontSize: 15,
-                    lineHeight: 1.4,
-                    animation: 'pulse 2s infinite',
-                    opacity: 0.7
-                  }} />
-                </ChatBubble>
-              )}
-              <div ref={messagesEndRef} />
+              <div className="flex flex-col gap-2 w-full">
+                {messages.map((msg) => (
+                  <ChatBubble
+                    key={msg.id}
+                    message={msg.message}
+                    sender={msg.sender as 'user' | 'agent'}
+                    agentName={currentAgent.name}
+                  />
+                ))}
+                {loading && (
+                  <ChatBubble
+                    message="Processing your request..."
+                    sender="agent"
+                    agentName={currentAgent.name}
+                  >
+                    <div style={{
+                      fontSize: 15,
+                      lineHeight: 1.4,
+                      animation: 'pulse 2s infinite',
+                      opacity: 0.7
+                    }} />
+                  </ChatBubble>
+                )}
+                <div ref={messagesEndRef} />
+              </div>
             </div>
 
-            {/* Enhanced Input area with Voice Controls */}
-            <div style={{ display: "flex", gap: 16, alignItems: "flex-end" }}>
-              <input
-                type="text"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !loading) handleSend();
-                }}
-                placeholder={`Transmit message to ${currentAgent.name}...`}
-                className="flex-1 px-4 py-3 rounded-xl border-2 border-athena-cyan/30 bg-athena-darker/80 text-white font-mono text-base focus:border-athena-cyan focus:shadow-neon-cyan focus:outline-none transition-all duration-300"
-                style={{
-                  backdropFilter: "blur(10px)"
-                }}
-                disabled={loading}
-              />
-              
-              <VoiceControls 
-                onVoiceInput={handleVoiceInput}
-                onSpeakToggle={setVoiceSpeakEnabled}
-                className="relative"
-              />
-              
+            {/* Input area: input full width, submit below, voice controls right */}
+            <div className="w-full flex flex-col gap-2">
+              <div className="flex w-full gap-2">
+                <input
+                  type="text"
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !loading) handleSend();
+                  }}
+                  placeholder={`Transmit message to ${currentAgent.name}...`}
+                  className="flex-1 px-4 py-3 rounded-xl border-2 border-athena-cyan/30 bg-athena-darker/80 text-white font-mono text-base focus:border-athena-cyan focus:shadow-neon-cyan focus:outline-none transition-all duration-300"
+                  style={{
+                    backdropFilter: "blur(10px)"
+                  }}
+                  disabled={loading}
+                />
+                <div className="flex items-end">
+                  <VoiceControls 
+                    onVoiceInput={handleVoiceInput}
+                    onSpeakToggle={handleSpeakToggle}
+                    className="relative"
+                  />
+                </div>
+              </div>
               <button
                 onClick={handleSend}
                 disabled={loading || !input.trim()}
-                className={`px-6 py-3 rounded-xl border-2 font-mono text-base font-bold transition-all duration-300 ${
+                className={`w-full mt-1 px-6 py-3 rounded-xl border-2 font-mono text-base font-bold transition-all duration-300 ${
                   loading || !input.trim() 
                     ? 'border-gray-500/50 bg-gray-500/20 text-gray-500 cursor-not-allowed'
                     : 'border-athena-cyan bg-gradient-to-r from-athena-cyan to-athena-green text-black hover:shadow-neon-cyan hover:scale-105'

@@ -1,6 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react';
-import { useVoice } from '@/hooks/useVoice';
+import { useState, useEffect, useCallback } from 'react';
 
 interface VoiceControlsProps {
   onVoiceInput: (text: string) => void;
@@ -10,31 +9,103 @@ interface VoiceControlsProps {
 
 export default function VoiceControls({ onVoiceInput, onSpeakToggle, className = '' }: VoiceControlsProps) {
   const [speakEnabled, setSpeakEnabled] = useState(false);
+  const [isListening, setIsListening] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isSupported, setIsSupported] = useState(false);
 
-  const { isListening, isSupported, startListening, speak } = useVoice({
-    onResult: (text) => {
-      onVoiceInput(text);
-      setError(null);
-    },
-    onError: (errorMsg) => {
-      setError(errorMsg);
-      setTimeout(() => setError(null), 3000);
+  // Check support once on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      setIsSupported(!!SpeechRecognition);
     }
-  });
+  }, []);
 
-  const handleSpeakToggle = () => {
+  const speak = useCallback((text: string) => {
+    if (typeof window === 'undefined') return;
+    
+    const synth = window.speechSynthesis;
+    const utterance = new SpeechSynthesisUtterance(text);
+    
+    // Try to use a female voice
+    const voices = synth.getVoices();
+    const femaleVoice = voices.find(voice => 
+      voice.name.toLowerCase().includes('female') || 
+      voice.name.toLowerCase().includes('samantha') ||
+      voice.name.toLowerCase().includes('zira') ||
+      voice.name.toLowerCase().includes('hazel')
+    );
+    
+    if (femaleVoice) {
+      utterance.voice = femaleVoice;
+    }
+    
+    utterance.rate = 0.9;
+    utterance.pitch = 1.1;
+    utterance.volume = 0.8;
+    
+    synth.speak(utterance);
+  }, []);
+
+  const startListening = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    
+    if (!SpeechRecognition) {
+      setError('Speech recognition not supported in this browser');
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = 'en-US';
+
+    recognition.onstart = () => {
+      setIsListening(true);
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+    };
+
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0]?.transcript;
+      if (transcript) {
+        onVoiceInput(transcript);
+        setError(null);
+      }
+    };
+
+    recognition.onerror = (event: any) => {
+      setIsListening(false);
+      setError(event.error || 'Speech recognition error');
+    };
+
+    recognition.start();
+  }, [onVoiceInput]);
+
+  const handleSpeakToggle = useCallback(() => {
     const newValue = !speakEnabled;
     setSpeakEnabled(newValue);
     onSpeakToggle?.(newValue);
-  };
+  }, [speakEnabled, onSpeakToggle]);
 
-  // Expose speak function for parent component
+  // Store speak function globally when enabled
   useEffect(() => {
     if (typeof window !== 'undefined') {
       (window as any).athenaSpeak = speakEnabled ? speak : null;
     }
-  }, [speak, speakEnabled]);
+  }, [speakEnabled, speak]);
+
+  // Clear error after 3 seconds
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => setError(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [error]);
 
   if (!isSupported) {
     return (
@@ -52,8 +123,8 @@ export default function VoiceControls({ onVoiceInput, onSpeakToggle, className =
         disabled={isListening}
         className={`relative px-4 py-2 rounded-lg border-2 font-mono text-sm font-bold transition-all duration-300 ${
           isListening
-            ? 'border-neon-red bg-red-500/20 text-red-300 shadow-neon-red animate-pulse'
-            : 'border-athena-cyan/50 bg-athena-cyan/10 text-athena-cyan hover:shadow-neon-cyan hover:bg-athena-cyan/20'
+            ? 'border-red-500 bg-red-500/20 text-red-300 animate-pulse'
+            : 'border-cyan-500/50 bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20'
         }`}
         style={{
           backdropFilter: 'blur(10px)',
@@ -78,8 +149,8 @@ export default function VoiceControls({ onVoiceInput, onSpeakToggle, className =
         onClick={handleSpeakToggle}
         className={`px-3 py-2 rounded-lg border-2 font-mono text-sm transition-all duration-300 ${
           speakEnabled
-            ? 'border-athena-green bg-athena-green/20 text-athena-green shadow-neon-green'
-            : 'border-gray-500/50 bg-gray-500/10 text-gray-400 hover:border-athena-green/50'
+            ? 'border-green-500 bg-green-500/20 text-green-300'
+            : 'border-gray-500/50 bg-gray-500/10 text-gray-400 hover:border-green-500/50'
         }`}
         style={{
           backdropFilter: 'blur(10px)',

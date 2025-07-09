@@ -1,5 +1,5 @@
 'use client'
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 
 interface UseVoiceOptions {
   onResult: (text: string) => void;
@@ -10,14 +10,12 @@ export function useVoice({ onResult, onError }: UseVoiceOptions) {
   const [isListening, setIsListening] = useState(false);
   const [isSupported, setIsSupported] = useState(false);
 
-  // Check if speech recognition is supported
-  const checkSupport = useCallback(() => {
+  // Check if speech recognition is supported - only run once
+  useEffect(() => {
     if (typeof window !== 'undefined') {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       setIsSupported(!!SpeechRecognition);
-      return !!SpeechRecognition;
     }
-    return false;
   }, []);
 
   // Start listening for voice input
@@ -44,14 +42,14 @@ export function useVoice({ onResult, onError }: UseVoiceOptions) {
       setIsListening(false);
     };
 
-    recognition.onresult = (event) => {
+    recognition.onresult = (event: any) => {
       const transcript = event.results[0]?.transcript;
       if (transcript) {
         onResult(transcript);
       }
     };
 
-    recognition.onerror = (event) => {
+    recognition.onerror = (event: any) => {
       setIsListening(false);
       onError?.(event.error || 'Speech recognition error');
     };
@@ -93,7 +91,7 @@ export function useVoice({ onResult, onError }: UseVoiceOptions) {
 
   return {
     isListening,
-    isSupported: checkSupport(),
+    isSupported,
     startListening,
     stopListening,
     speak
