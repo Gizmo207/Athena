@@ -1,12 +1,10 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { Ollama } from '@langchain/ollama';
-import athenaPrompt from '../../prompts/athena'; // Modular prompt loading
 import { Document } from '@langchain/core/documents';
 import { ConversationSummaryBufferMemory } from 'langchain/memory';
 import { AthenaMemoryManager } from '../../lib/memory/AthenaMemoryManager';
 import { sanitizeDates } from '../../lib/utils/dateSanitizer';
 import { storeConversationSummary, getRecentSummaries } from '../../lib/memory/conversationLogger';
-import { getChromaStore } from '../../lib/vectorstore/chroma';
 
 // Configuration
 const OLLAMA_BASE_URL = 'http://localhost:11434';
@@ -62,7 +60,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       console.warn('Could not retrieve recent summaries:', err);
     }
 
-    // --- Build full prompt using short-term buffer and long-term memory ---
+    // --- Build prompt using only STM, LTM, and user message (no persona) ---
     console.log('🧠 Step 3: Building memory context...');
     const memoryContext = await memoryManager.getMemoryContext(message);
     
@@ -73,7 +71,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const promptParts: string[] = [];
     promptParts.push('[INST]');
-    promptParts.push(athenaPrompt);
+    promptParts.push('You are ATHENA, an intelligent overseer agent. Respond authoritatively based on the context provided.');
     promptParts.push('');
     
     if (memoryContext) {
@@ -99,6 +97,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     
     promptParts.push(`YOU: ${message}`);
     promptParts.push('[/INST]');
+    promptParts.push('ATHENA:');
     const promptText = promptParts.join('\n');
     console.log('🤖 Invoking LLM with full prompt...');
     

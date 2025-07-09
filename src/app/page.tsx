@@ -4,7 +4,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import AthenaBootup from "@/components/AthenaBootup";
 import AgentSwitcher, { Agent, AVAILABLE_AGENTS } from "@/components/AgentSwitcher";
-
+import SessionSidebar from "@/components/SessionSidebar";
 import ChatBubble from "@/components/ChatBubble";
 import { restoreAthenaMemoryContext } from "@/hooks/sessionRestore";
 
@@ -23,7 +23,8 @@ export default function Home() {
   const [booted, setBooted] = useState(false);
   const [currentAgent, setCurrentAgent] = useState<Agent>(AVAILABLE_AGENTS[0]); // Start with ATHENA
   const [shortTermBuffer, setShortTermBuffer] = useState<Array<{ role: string; content: string }>>([]); // STM buffer
-  const [sessionId] = useState(() => `session_${Date.now()}`); // Unique session ID
+  const [sessionId, setSessionId] = useState(() => `session_${Date.now()}`); // Current session ID
+  const [showGreeting, setShowGreeting] = useState(true); // Control greeting display
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageId = useRef(2);
@@ -73,6 +74,11 @@ export default function Home() {
         sender: "agent" as "agent",
       };
       setMessages((msgs) => [...msgs, agentMsg]);
+      
+      // Update session with last message
+      if ((window as any).updateAthenaSession) {
+        (window as any).updateAthenaSession(agentMsg.message);
+      }
     } catch (e) {
       console.error("Error:", e);
       setMessages((msgs) => [
@@ -100,6 +106,67 @@ export default function Home() {
     setMessages((msgs) => [...msgs, switchMsg]);
   }, []);
 
+  // Session management handlers
+  const handleSessionChange = useCallback((newSessionId: string) => {
+    // Save current session state
+    try {
+      const sessionData = {
+        messages,
+        shortTermBuffer,
+        messageId: messageId.current
+      };
+      localStorage.setItem(`session_${sessionId}`, JSON.stringify(sessionData));
+    } catch (err) {
+      console.warn('Failed to save current session:', err);
+    }
+
+    // Load new session state
+    try {
+      const savedSession = localStorage.getItem(`session_${newSessionId}`);
+      if (savedSession) {
+        const sessionData = JSON.parse(savedSession);
+        setMessages(sessionData.messages || []);
+        setShortTermBuffer(sessionData.shortTermBuffer || []);
+        messageId.current = sessionData.messageId || 2;
+        setShowGreeting(false); // Don't show greeting when switching sessions
+      } else {
+        // New session - reset to initial state
+        setMessages([
+          {
+            id: 1,
+            message:
+              "Greetings, Commander. I'm ATHENA, your Intelligent Overseer Agent. I'm here to help you coordinate complex projects, manage tasks, and provide strategic insights. My memory systems are online and I'm ready to assist with whatever challenges you're facing. What's our first objective?",
+            sender: "agent",
+          },
+        ]);
+        setShortTermBuffer([]);
+        messageId.current = 2;
+        setShowGreeting(true);
+      }
+    } catch (err) {
+      console.warn('Failed to load session:', err);
+      // Reset to default state on error
+      setMessages([
+        {
+          id: 1,
+          message:
+            "Greetings, Commander. I'm ATHENA, your Intelligent Overseer Agent. I'm here to help you coordinate complex projects, manage tasks, and provide strategic insights. My memory systems are online and I'm ready to assist with whatever challenges you're facing. What's our first objective?",
+          sender: "agent",
+        },
+      ]);
+      setShortTermBuffer([]);
+      messageId.current = 2;
+      setShowGreeting(true);
+    }
+
+    setSessionId(newSessionId);
+  }, [messages, shortTermBuffer, sessionId]);
+
+  const handleNewSession = useCallback(() => {
+    const newSessionId = `session_${Date.now()}`;
+    handleSessionChange(newSessionId);
+  }, [handleSessionChange]);
+
   // On boot, restore Athena's memory context and inject as system message
   useEffect(() => {
     async function injectMemoryContext() {
@@ -124,6 +191,13 @@ export default function Home() {
 
   return (
     <>
+      {/* Session Sidebar */}
+      <SessionSidebar
+        currentSessionId={sessionId}
+        onSessionChange={handleSessionChange}
+        onNewSession={handleNewSession}
+      />
+      
       {/* Bootup Animation */}
       {!booted && <AthenaBootup onComplete={() => setBooted(true)} />}
       
@@ -132,7 +206,8 @@ export default function Home() {
         <div 
           style={{
             height: '100vh',
-            width: '100vw',
+            width: 'calc(100vw - 300px)', // Account for sidebar
+            marginLeft: '300px', // Account for sidebar width
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
