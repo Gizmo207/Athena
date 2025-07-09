@@ -2,7 +2,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import AthenaBootup from "@/components/AthenaBootup";
 import AgentSwitcher, { Agent, AVAILABLE_AGENTS } from "@/components/AgentSwitcher";
-import VoiceControls from "@/components/VoiceControls";
+
 import ChatBubble from "@/components/ChatBubble";
 
 export default function Home() {
@@ -17,7 +17,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [booted, setBooted] = useState(false);
   const [currentAgent, setCurrentAgent] = useState<Agent>(AVAILABLE_AGENTS[0]); // Start with ATHENA
-  const [voiceSpeakEnabled, setVoiceSpeakEnabled] = useState(false);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageId = useRef(2);
 
@@ -63,10 +63,7 @@ export default function Home() {
       };
       setMessages((msgs) => [...msgs, agentMsg]);
       
-      // Speak the response if TTS is enabled
-      if (voiceSpeakEnabled && (window as any).athenaSpeak) {
-        (window as any).athenaSpeak(data.reply || "I apologize, but I couldn't generate a response.");
-      }
+
     } catch (e) {
       console.error('Error:', e);
       setMessages((msgs) => [
@@ -77,10 +74,6 @@ export default function Home() {
       setLoading(false);
     }
   };
-
-  const handleVoiceInput = useCallback((text: string) => {
-    setInput(text);
-  }, []);
 
   const handleAgentChange = useCallback((agent: Agent) => {
     setCurrentAgent(agent);
@@ -93,9 +86,6 @@ export default function Home() {
     setMessages((msgs) => [...msgs, switchMsg]);
   }, []);
 
-  const handleSpeakToggle = useCallback((enabled: boolean) => {
-    setVoiceSpeakEnabled(enabled);
-  }, []);
 
   return (
     <>
@@ -209,87 +199,99 @@ export default function Home() {
             </div>
 
             {/* Messages container */}
-            <div style={{ 
-              height: 440, 
-              overflowY: "auto", 
-              marginBottom: 24, 
-              padding: 0,
-              scrollbarWidth: "thin",
-              scrollbarColor: "#00d4ff rgba(255,255,255,0.1)"
-            }}>
-              <div className="flex flex-col gap-2 w-full">
-                {messages.map((msg) => (
+            <div
+              style={{
+                height: 440,
+                overflowY: "auto",
+                marginBottom: 24,
+                padding: 0,
+                scrollbarWidth: "thin",
+                scrollbarColor: "#00d4ff rgba(255,255,255,0.1)",
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 0,
+              }}
+            >
+              {/* Staggered chat bubbles, not full width, with clear separation */}
+              {messages.map((msg, idx) => (
+                <div
+                  key={msg.id}
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: msg.sender === 'user' ? 'flex-end' : 'flex-start',
+                    marginTop: idx === 0 ? 0 : 24,
+                    marginBottom: 0,
+                    width: '100%',
+                  }}
+                >
                   <ChatBubble
-                    key={msg.id}
                     message={msg.message}
                     sender={msg.sender as 'user' | 'agent'}
                     agentName={currentAgent.name}
                   />
-                ))}
-                {loading && (
-                  <ChatBubble
-                    message="Processing your request..."
-                    sender="agent"
-                    agentName={currentAgent.name}
-                  >
-                    <div style={{
-                      fontSize: 15,
-                      lineHeight: 1.4,
-                      animation: 'pulse 2s infinite',
-                      opacity: 0.7
-                    }} />
+                </div>
+              ))}
+              {loading && (
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'flex-start',
+                    marginTop: 24,
+                    width: '100%',
+                  }}
+                >
+                  <ChatBubble message={""} sender="agent" agentName={currentAgent.name}>
+                    <div style={{ minHeight: 32, display: 'flex', alignItems: 'center' }}>
+                      <span style={{ color: '#aaa', fontSize: 18, marginRight: 8 }}>Processing your request</span>
+                      <span className="typing-dots">
+                        <span></span><span></span><span></span>
+                      </span>
+                    </div>
                   </ChatBubble>
-                )}
-                <div ref={messagesEndRef} />
-              </div>
+                </div>
+              )}
+              <div ref={messagesEndRef} />
             </div>
 
-            {/* Input area: OpenAI-style textarea, voice controls right, submit below */}
-            <div className="w-full flex flex-col gap-2">
-              <div className="relative w-full flex flex-row">
-                <textarea
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey && !loading) {
-                      e.preventDefault();
-                      handleSend();
-                    }
-                  }}
-                  placeholder={`Transmit message to ${currentAgent.name}...`}
-                  rows={3}
-                  className="flex-1 resize-none px-5 py-4 rounded-3xl border-2 border-athena-cyan/30 bg-athena-darker/80 text-white font-mono text-lg focus:border-athena-cyan focus:shadow-neon-cyan focus:outline-none transition-all duration-300 pr-32 shadow-lg"
-                  style={{
-                    minHeight: 72,
-                    maxHeight: 180,
-                    backdropFilter: "blur(10px)",
-                    boxShadow: "0 2px 16px 0 rgba(0,212,255,0.10)"
-                  }}
-                  disabled={loading}
-                />
-                {/* Voice controls absolutely positioned to the far right, vertically centered */}
-                <div
-                  className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center"
-                  style={{ zIndex: 2 }}
-                >
-                  <VoiceControls
-                    onVoiceInput={handleVoiceInput}
-                    onSpeakToggle={handleSpeakToggle}
-                    className="relative"
-                  />
-                </div>
-              </div>
+            {/* Input area: OpenAI-style textarea, submit below, no voice controls, full width, no flex issues */}
+            <div style={{ width: '100%' }}>
+              <textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey && !loading) {
+                    e.preventDefault();
+                    handleSend();
+                  }
+                }}
+                placeholder={`Transmit message to ${currentAgent.name}...`}
+                rows={3}
+                className="resize-none px-7 py-7 rounded-2xl border-2 border-cyan-400 bg-[#181c24] text-white font-mono text-2xl focus:border-cyan-300 focus:ring-2 focus:ring-cyan-400/60 focus:outline-none transition-all duration-300 shadow-xl placeholder-gray-400 dark:placeholder-gray-500 w-full"
+                style={{
+                  minHeight: 88,
+                  maxHeight: 220,
+                  width: '100%',
+                  background: 'rgba(26,26,46,0.95)',
+                  backdropFilter: 'blur(10px)',
+                  boxShadow: '0 0 24px 4px rgba(0,212,255,0.15), 0 2px 16px 0 rgba(0,212,255,0.10)'
+                }}
+                disabled={loading}
+              />
               <button
                 onClick={handleSend}
                 disabled={loading || !input.trim()}
-                className={`w-full mt-1 px-6 py-4 rounded-3xl border-2 font-mono text-lg font-bold transition-all duration-300 ${
-                  loading || !input.trim()
+                className={`w-full mt-3 px-7 py-6 rounded-2xl border-2 font-mono text-2xl font-bold transition-all duration-300 shadow-xl focus:outline-none focus:ring-2 focus:ring-cyan-400/60
+                  ${loading || !input.trim()
                     ? 'border-gray-500/50 bg-gray-500/20 text-gray-500 cursor-not-allowed'
-                    : 'border-athena-cyan bg-gradient-to-r from-athena-cyan to-athena-green text-black hover:shadow-neon-cyan hover:scale-105'
-                }`}
+                    : 'border-cyan-400 bg-[#0a1120] text-white hover:bg-[#18213a] hover:shadow-[0_0_32px_6px_rgba(0,212,255,0.25)] hover:scale-105'}`}
                 style={{
-                  backdropFilter: "blur(10px)",
-                  boxShadow: "0 2px 16px 0 rgba(0,212,255,0.10)"
+                  backdropFilter: 'blur(10px)',
+                  boxShadow: '0 0 32px 6px rgba(0,212,255,0.25), 0 2px 16px 0 rgba(0,212,255,0.10)',
+                  color: loading || !input.trim() ? undefined : '#fff',
+                  textShadow: loading || !input.trim() ? undefined : '0 1px 8px #000, 0 0 2px #00d4ff',
+                  borderColor: '#0ff',
                 }}
               >
                 {loading ? "●●●" : "TRANSMIT"}
