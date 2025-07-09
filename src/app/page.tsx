@@ -268,14 +268,15 @@ export default function Home() {
                 }}
                 placeholder={`Transmit message to ${currentAgent.name}...`}
                 rows={3}
-                className="resize-none px-7 py-7 rounded-2xl border-2 border-cyan-400 bg-[#181c24] text-white font-mono text-2xl focus:border-cyan-300 focus:ring-2 focus:ring-cyan-400/60 focus:outline-none transition-all duration-300 shadow-xl placeholder-gray-400 dark:placeholder-gray-500 w-full"
+                className="resize-none px-7 py-7 rounded-2xl border-2 border-cyan-400 bg-[#181c24] text-cyan-100 font-mono text-2xl focus:border-cyan-300 focus:ring-2 focus:ring-cyan-400/60 focus:outline-none transition-all duration-300 shadow-xl placeholder-gray-400 dark:placeholder-gray-500 w-full"
                 style={{
                   minHeight: 88,
                   maxHeight: 220,
                   width: '100%',
                   background: 'rgba(26,26,46,0.95)',
                   backdropFilter: 'blur(10px)',
-                  boxShadow: '0 0 24px 4px rgba(0,212,255,0.15), 0 2px 16px 0 rgba(0,212,255,0.10)'
+                  boxShadow: '0 0 24px 4px rgba(0,212,255,0.15), 0 2px 16px 0 rgba(0,212,255,0.10)',
+                  color: '#e0f7ff'
                 }}
                 disabled={loading}
               />
