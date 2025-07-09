@@ -11,9 +11,11 @@
   "dependencies": {
     "@chatscope/chat-ui-kit-react": "^2.1.1",
     "@chatscope/chat-ui-kit-styles": "^1.4.0",
-    "@langchain/community": "^0.2.17",
-    "faiss-node": "^0.5.1",
-    "langchain": "^0.2.5",
+    "@langchain/community": "^0.3.48",
+    "@langchain/core": "^0.3.62",
+    "@langchain/ollama": "^0.2.3",
+    "hnswlib-node": "^3.0.0",
+    "langchain": "^0.3.29",
     "next": "15.3.5",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
