@@ -6,6 +6,7 @@ import AthenaBootup from "@/components/AthenaBootup";
 import AgentSwitcher, { Agent, AVAILABLE_AGENTS } from "@/components/AgentSwitcher";
 
 import ChatBubble from "@/components/ChatBubble";
+import { restoreAthenaMemoryContext } from "@/hooks/sessionRestore";
 
 // Main Home Page — Modular, TypeScript, Airbnb+Prettier
 export default function Home() {
@@ -84,6 +85,27 @@ export default function Home() {
       sender: "system" as const,
     };
     setMessages((msgs) => [...msgs, switchMsg]);
+  }, []);
+
+  // On boot, restore Athena's memory context and inject as system message
+  useEffect(() => {
+    async function injectMemoryContext() {
+      const memoryContext = await restoreAthenaMemoryContext();
+      if (memoryContext && memoryContext.trim().length > 0) {
+        setMessages((msgs) => [
+          {
+            id: 0,
+            message: `ATHENA MEMORY CONTEXT:\n${memoryContext}`,
+            sender: "system",
+          },
+          ...msgs,
+        ]);
+        console.log('[Athena:page] Injected memory context:', memoryContext);
+      } else {
+        console.log('[Athena:page] No persistent memory context found.');
+      }
+    }
+    injectMemoryContext();
   }, []);
 
 
