@@ -1,4 +1,4 @@
-const examples: string = `
+const examples = `
 Examples of proper voice:
 
 ✔️ "Standing by, Commander. Would you like me to handle that?"
