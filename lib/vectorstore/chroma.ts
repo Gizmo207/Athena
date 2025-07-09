@@ -1,6 +1,6 @@
 // lib/vectorstore/chroma.ts
 import { Chroma } from '@langchain/community/vectorstores/chroma';
-import { OllamaEmbeddings } from '@langchain/ollama';
+import { DefaultEmbeddingFunction } from '@chroma-core/default-embed';
 import path from 'path';
 
 // Directory for on-disk persistence
@@ -14,10 +14,9 @@ let chromaStore: Chroma | null = null;
 // Modular, strict, future-proofed
 export async function getChromaStore() {
   if (chromaStore) return chromaStore;
-  // Use OllamaEmbeddings for local embedding via Ollama
-  const embeddings = new OllamaEmbeddings({ baseUrl: 'http://localhost:11434', model: 'mistral:instruct' });
+  // Use DefaultEmbeddingFunction for Chroma
+  const embeddings = new DefaultEmbeddingFunction();
   // Connect to an existing Chroma collection or create if missing
-  // Connect to existing Chroma collection via LangChain wrapper
   try {
     chromaStore = await Chroma.fromExistingCollection(
       embeddings,
