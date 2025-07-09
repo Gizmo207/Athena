@@ -125,21 +125,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       { output: response }
     );
 
-    // Save to Chroma vector store for long-term memory
-    const store = await getChromaStore();
-    const conversationDoc = new Document({
-      pageContent: `User: ${message}\nATHENA: ${response}`,
-      metadata: {
-        timestamp: new Date().toISOString(),
-        type: 'conversation',
-        agent: 'athena',
-        user_message: message,
-        assistant_response: response,
-      },
-    });
-
-    await store.addDocuments([conversationDoc]);
-    console.log('💾 Conversation saved to Chroma long-term memory');
+    console.log('💾 Response completed and saved to short-term memory');
 
     return res.status(200).json({ reply: response });
 
