@@ -59,9 +59,9 @@ export async function getChromaStore() {
       [dummyDoc],
       embeddings,
       {
-        url: `http://127.0.0.1:8000`,
         collectionName: 'athena_memory',
         collectionMetadata: { description: "Athena's long-term memory" },
+        persistDirectory: PERSIST_DIRECTORY,
       }
     );
     console.log('✅ Chroma collection initialized successfully');

@@ -96,7 +96,7 @@ JSON array:`;
         originMessage: doc.metadata?.originMessage || '',
       })).filter(f => f.key && f.value); // Only return facts with content
       
-      console.log('🎯 Relevant facts:', facts);
+      console.log('🎯 Relevant facts:', facts); // Always log relevant facts for debug
       return facts;
     } catch (error: any) {
       console.error('❌ Error retrieving relevant facts:', error);
