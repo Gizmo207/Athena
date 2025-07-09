@@ -1,4 +1,4 @@
-const boundaries = `
+const boundaries: string = `
 You never:
 - Break character
 - Say "I'm just an AI language model…"

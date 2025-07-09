@@ -4,7 +4,7 @@ import { getChromaStore } from '../vectorstore/chroma';
 /**
  * Manages Athena's long-term memory using Chroma vector store.
  */
-export class AthenaMemoryManager {
+export class AthenaMemoryManager { // Modular, strict, future-proofed
   private storePromise = getChromaStore();
 
   /**

@@ -11,6 +11,7 @@ let chromaStore: Chroma | null = null;
 /**
  * Returns a disk-persistent Chroma vector store for Athena's long-term memory.
  */
+// Modular, strict, future-proofed
 export async function getChromaStore() {
   if (chromaStore) return chromaStore;
   // Use OllamaEmbeddings for local embedding via Ollama

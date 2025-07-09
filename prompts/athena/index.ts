@@ -4,7 +4,7 @@ import tone from './tone';
 import boundaries from './boundaries';
 import examples from './examples';
 
-const athenaPrompt = `
+const athenaPrompt: string = `
 ${identity}
 
 ${goals}
@@ -17,3 +17,4 @@ ${examples}
 `;
 
 export default athenaPrompt;
+
