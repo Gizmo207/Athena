@@ -1,6 +1,38 @@
 // lib/vectorstore/chroma.ts
 import { Chroma } from '@langchain/community/vectorstores/chroma';
+import { Embeddings } from '@langchain/core/embeddings';
 import path from 'path';
+
+// Simple local embeddings that hash text into vectors
+class SimpleLocalEmbeddings extends Embeddings {
+  constructor() {
+    super({});
+  }
+
+  async embedDocuments(texts: string[]): Promise<number[][]> {
+    return texts.map(text => this.hashToVector(text));
+  }
+
+  async embedQuery(text: string): Promise<number[]> {
+    return this.hashToVector(text);
+  }
+
+  private hashToVector(text: string): number[] {
+    // Simple hash-based vector generation (384 dimensions like all-MiniLM-L6-v2)
+    const vector = new Array(384).fill(0);
+    const cleanText = text.toLowerCase().replace(/[^\w\s]/g, '');
+    
+    for (let i = 0; i < cleanText.length; i++) {
+      const char = cleanText.charCodeAt(i);
+      const index = (char + i) % 384;
+      vector[index] += Math.sin(char * 0.1 + i * 0.01);
+    }
+    
+    // Normalize the vector
+    const magnitude = Math.sqrt(vector.reduce((sum, val) => sum + val * val, 0));
+    return magnitude > 0 ? vector.map(val => val / magnitude) : vector;
+  }
+}
 
 // Directory for on-disk persistence
 const PERSIST_DIRECTORY = path.join(process.cwd(), 'vectorstore', 'athena');
@@ -9,33 +41,38 @@ let chromaStore: Chroma | null = null;
 
 /**
  * Returns a disk-persistent Chroma vector store for Athena's long-term memory.
+ * Uses simple local embeddings for 100% local operation.
  */
-// Modular, strict, future-proofed
 export async function getChromaStore() {
   if (chromaStore) return chromaStore;
   
-  // Connect to an existing Chroma collection or create if missing
+  // Use simple local embeddings (no remote APIs, no complex dependencies)
+  const embeddings = new SimpleLocalEmbeddings();
+  
+  // Always create collection from documents (handles both new and existing)
   try {
-    chromaStore = await Chroma.fromExistingCollection(
-      {
-        url: `http://127.0.0.1:8000`,  // Chroma service URL (hardcoded for now)
-        collectionName: 'athena_memory',                     // collection name in Chroma
-        collectionMetadata: { description: "Athena's long-term memory" },
-      }
-    );
-    console.log('✅ Connected to existing Chroma collection with default embeddings');
-  } catch (error: any) {
-    console.warn('⚠️ Creating new Chroma collection...', error.message);
-    // create an empty collection if it doesn't exist
+    console.log('🔄 Initializing Chroma collection...');
+    
+    // Create/connect to collection with dummy document first
+    const dummyDoc = { pageContent: 'initialization', metadata: { type: 'init' } };
     chromaStore = await Chroma.fromDocuments(
-      [],
+      [dummyDoc],
+      embeddings,
       {
         url: `http://127.0.0.1:8000`,
         collectionName: 'athena_memory',
         collectionMetadata: { description: "Athena's long-term memory" },
       }
     );
-    console.log('✅ Created new Chroma collection with default embeddings');
+    console.log('✅ Chroma collection initialized successfully');
+    
+    // Test the collection with a simple search
+    const testResults = await chromaStore.similaritySearch('test', 1);
+    console.log(`🔍 Collection test: found ${testResults.length} results`);
+    
+    return chromaStore;
+  } catch (error: any) {
+    console.error('❌ Failed to initialize Chroma collection:', error);
+    throw new Error(`Chroma initialization failed: ${error.message}`);
   }
-  return chromaStore;
 }

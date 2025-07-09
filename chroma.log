@@ -185,3 +185,48 @@
 [32mINFO[0m:     [09-07-2025 10:45:15] 127.0.0.1:53694 - "POST /api/v2/tenants/default_tenant/databases/default_database/collections HTTP/1.1" 404
 [32mINFO[0m:     [09-07-2025 10:48:14] 127.0.0.1:56002 - "POST /api/v2/tenants/default_tenant/databases/default_database/collections HTTP/1.1" 404
 [32mINFO[0m:     [09-07-2025 10:59:51] 127.0.0.1:65056 - "GET /api/v1/heartbeat HTTP/1.1" 200
+[33mWARNING[0m:  [09-07-2025 11:45:59] chroma_server_nofile is not supported on Windows. chroma_server_nofile will not be set.
+[32mINFO[0m:     [09-07-2025 11:46:00] Anonymized telemetry enabled. See                     https://docs.trychroma.com/telemetry for more information.
+[36mDEBUG[0m:    [09-07-2025 11:46:00] Starting component System
+[36mDEBUG[0m:    [09-07-2025 11:46:00] Starting component OpenTelemetryClient
+[36mDEBUG[0m:    [09-07-2025 11:46:00] Starting component SimpleAssignmentPolicy
+[36mDEBUG[0m:    [09-07-2025 11:46:00] Starting component SqliteDB
+[36mDEBUG[0m:    [09-07-2025 11:46:00] Starting component QuotaEnforcer
+[36mDEBUG[0m:    [09-07-2025 11:46:00] Starting component Posthog
+[36mDEBUG[0m:    [09-07-2025 11:46:00] Starting component LocalSegmentManager
+[36mDEBUG[0m:    [09-07-2025 11:46:00] Starting component SegmentAPI
+[32mINFO[0m:     [09-07-2025 11:46:00] Started server process [[36m42384[0m]
+[32mINFO[0m:     [09-07-2025 11:46:00] Waiting for application startup.
+[32mINFO[0m:     [09-07-2025 11:46:00] Application startup complete.
+[32mINFO[0m:     [09-07-2025 11:46:00] Uvicorn running on [1mhttp://127.0.0.1:8000[0m (Press CTRL+C to quit)
+[32mINFO[0m:     [09-07-2025 11:49:20] 127.0.0.1:55034 - "POST /api/v2/tenants/default_tenant/databases/default_database/collections HTTP/1.1" 404
+[32mINFO[0m:     [09-07-2025 11:49:20] 127.0.0.1:55035 - "POST /api/v2/tenants/default_tenant/databases/default_database/collections HTTP/1.1" 404
+[32mINFO[0m:     [09-07-2025 11:49:29] 127.0.0.1:55159 - "POST /api/v2/tenants/default_tenant/databases/default_database/collections HTTP/1.1" 404
+[32mINFO[0m:     [09-07-2025 11:49:29] 127.0.0.1:55163 - "POST /api/v2/tenants/default_tenant/databases/default_database/collections HTTP/1.1" 404
+[32mINFO[0m:     [09-07-2025 11:49:29] 127.0.0.1:55159 - "POST /api/v2/tenants/default_tenant/databases/default_database/collections HTTP/1.1" 404
+[32mINFO[0m:     [09-07-2025 11:49:40] 127.0.0.1:55295 - "POST /api/v2/tenants/default_tenant/databases/default_database/collections HTTP/1.1" 404
+[32mINFO[0m:     [09-07-2025 11:49:40] 127.0.0.1:55297 - "POST /api/v2/tenants/default_tenant/databases/default_database/collections HTTP/1.1" 404
+[32mINFO[0m:     [09-07-2025 11:50:30] 127.0.0.1:55937 - "POST /api/v2/tenants/default_tenant/databases/default_database/collections HTTP/1.1" 404
+[32mINFO[0m:     [09-07-2025 11:50:30] 127.0.0.1:55939 - "POST /api/v2/tenants/default_tenant/databases/default_database/collections HTTP/1.1" 404
+[32mINFO[0m:     [09-07-2025 11:51:19] 127.0.0.1:56573 - "POST /api/v2/tenants/default_tenant/databases/default_database/collections HTTP/1.1" 404
+[32mINFO[0m:     [09-07-2025 11:51:19] 127.0.0.1:56574 - "POST /api/v2/tenants/default_tenant/databases/default_database/collections HTTP/1.1" 404
+[32mINFO[0m:     [09-07-2025 11:51:28] 127.0.0.1:56690 - "POST /api/v2/tenants/default_tenant/databases/default_database/collections HTTP/1.1" 404
+[32mINFO[0m:     [09-07-2025 11:51:28] 127.0.0.1:56693 - "POST /api/v2/tenants/default_tenant/databases/default_database/collections HTTP/1.1" 404
+[32mINFO[0m:     [09-07-2025 11:51:28] 127.0.0.1:56690 - "POST /api/v2/tenants/default_tenant/databases/default_database/collections HTTP/1.1" 404
+[32mINFO[0m:     [09-07-2025 11:51:41] 127.0.0.1:56861 - "POST /api/v2/tenants/default_tenant/databases/default_database/collections HTTP/1.1" 404
+[32mINFO[0m:     [09-07-2025 11:51:41] 127.0.0.1:56863 - "POST /api/v2/tenants/default_tenant/databases/default_database/collections HTTP/1.1" 404
+[32mINFO[0m:     [09-07-2025 11:52:07] 127.0.0.1:57190 - "GET /api/v1/collections HTTP/1.1" 200
+[32mINFO[0m:     [09-07-2025 12:00:00] 127.0.0.1:63512 - "POST /api/v2/tenants/default_tenant/databases/default_database/collections HTTP/1.1" 404
+[32mINFO[0m:     [09-07-2025 12:00:00] 127.0.0.1:63513 - "POST /api/v2/tenants/default_tenant/databases/default_database/collections HTTP/1.1" 404
+[32mINFO[0m:     [09-07-2025 12:00:00] 127.0.0.1:63512 - "POST /api/v2/tenants/default_tenant/databases/default_database/collections HTTP/1.1" 404
+[32mINFO[0m:     [09-07-2025 12:00:00] 127.0.0.1:63514 - "POST /api/v2/tenants/default_tenant/databases/default_database/collections HTTP/1.1" 404
+[32mINFO[0m:     [09-07-2025 12:00:14] 127.0.0.1:63705 - "POST /api/v2/tenants/default_tenant/databases/default_database/collections HTTP/1.1" 404
+[32mINFO[0m:     [09-07-2025 12:00:15] 127.0.0.1:63707 - "POST /api/v2/tenants/default_tenant/databases/default_database/collections HTTP/1.1" 404
+[32mINFO[0m:     [09-07-2025 12:00:15] 127.0.0.1:63705 - "POST /api/v2/tenants/default_tenant/databases/default_database/collections HTTP/1.1" 404
+[32mINFO[0m:     [09-07-2025 12:00:28] 127.0.0.1:63885 - "POST /api/v2/tenants/default_tenant/databases/default_database/collections HTTP/1.1" 404
+[32mINFO[0m:     [09-07-2025 12:00:28] 127.0.0.1:63887 - "POST /api/v2/tenants/default_tenant/databases/default_database/collections HTTP/1.1" 404
+[32mINFO[0m:     [09-07-2025 12:05:01] 127.0.0.1:51146 - "GET /api/v1/heartbeat HTTP/1.1" 200
+[32mINFO[0m:     [09-07-2025 12:05:07] 127.0.0.1:51146 - "GET /api/v1/collections HTTP/1.1" 200
+[32mINFO[0m:     [09-07-2025 12:10:02] 127.0.0.1:55144 - "POST /api/v2/tenants/default_tenant/databases/default_database/collections HTTP/1.1" 404
+[32mINFO[0m:     [09-07-2025 12:10:02] 127.0.0.1:55145 - "POST /api/v2/tenants/default_tenant/databases/default_database/collections HTTP/1.1" 404
+[32mINFO[0m:     [09-07-2025 12:10:23] 127.0.0.1:55444 - "POST /api/v2/tenants/default_tenant/databases/default_database/collections HTTP/1.1" 404

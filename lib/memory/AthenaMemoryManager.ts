@@ -48,23 +48,13 @@ JSON array:`;
         return;
       }
 
-      // Store each fact as a separate document with proper deduplication
+      // Store each fact as a separate document (simplified - no immediate deduplication)
       for (const fact of facts) {
         if (!fact.key || !fact.value) continue;
         
-        // Search for existing facts with the same key
-        const existingDocs = await store.similaritySearch(`${fact.key}`, 10, { userId });
+        console.log(`💾 Storing fact: ${fact.key} = ${fact.value}`);
         
-        // Delete any existing fact with the same key
-        for (const doc of existingDocs) {
-          if (doc.metadata?.key === fact.key && doc.metadata?.userId === userId) {
-            console.log(`🔄 Updating existing fact: ${fact.key}`);
-            // Note: Chroma doesn't have easy delete by metadata, so we'll just add the new one
-            // The newer timestamp will make it more relevant
-          }
-        }
-        
-        // Store new/updated fact
+        // Store new fact directly
         const doc = new Document({
           pageContent: `${fact.key}: ${fact.value}`,
           metadata: {
@@ -79,7 +69,7 @@ JSON array:`;
         });
         
         await store.addDocuments([doc]);
-        console.log(`💾 Stored fact: ${fact.key} = ${fact.value}`);
+        console.log(`✅ Stored fact: ${fact.key} = ${fact.value}`);
       }
     } catch (error: any) {
       console.error('❌ Error adding fact to memory store:', error);
