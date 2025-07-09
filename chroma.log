@@ -180,3 +180,4 @@
 [32mINFO[0m:     [09-07-2025 10:30:44] 127.0.0.1:58425 - "GET /api/v1/tenants/default_tenant HTTP/1.1" 200
 [32mINFO[0m:     [09-07-2025 10:30:44] 127.0.0.1:58425 - "GET /api/v1/databases/default_database?tenant=default_tenant HTTP/1.1" 200
 [32mINFO[0m:     [09-07-2025 10:30:44] 127.0.0.1:58428 - "GET /api/v1 HTTP/1.1" 200
+[32mINFO[0m:     [09-07-2025 10:37:27] 127.0.0.1:63828 - "POST /api/v2/tenants/default_tenant/databases/default_database/collections HTTP/1.1" 404
