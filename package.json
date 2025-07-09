@@ -15,9 +15,13 @@
     "@langchain/core": "^0.3.62",
     "@langchain/ollama": "^0.2.3",
     "autoprefixer": "^10.4.21",
+    "buffer": "^6.0.3",
+    "chromadb": "^3.0.6",
     "hnswlib-node": "^3.0.0",
     "langchain": "^0.3.29",
     "next": "15.3.5",
+    "path-browserify": "^1.0.1",
+    "process": "^0.11.10",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "tailwindcss": "^4.1.11"
