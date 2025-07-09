@@ -86,7 +86,7 @@ function formatDocs(docs: Document[]): string {
 }
 
 // Create the RAG chain
-async function createRAGChain(customSystemPrompt?: string) {
+async function createRAGChain(customSystemPrompt?: string, sessionContext?: string) {
   const store = await getVectorStore();
   const retriever = store.asRetriever({
     k: 5, // Retrieve top 5 relevant documents
@@ -131,6 +131,9 @@ Use the following context from our previous conversations:
 Recent conversation context:
 {chat_history}
 
+Additional conversation context from this session:
+{session_context}
+
 Current message: {question}
 
 🎯 RESPONSE GUIDELINES:
@@ -151,6 +154,7 @@ Response as ATHENA:`;
       context: retriever.pipe(formatDocs),
       question: new RunnablePassthrough(),
       chat_history: () => conversationMemory.chatHistory || '',
+      session_context: () => sessionContext || '',
     },
     prompt,
     llm,
@@ -169,19 +173,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   console.log('🚀 Athena RAG API called');
 
   try {
-    const { message, agent = 'athena', systemPrompt } = req.body;
+    const { message, agent = 'athena', systemPrompt, context } = req.body;
 
     if (!message || typeof message !== 'string' || message.trim() === '') {
       return res.status(400).json({ error: 'Invalid message provided' });
     }
 
     console.log(`📦 Processing message for agent: ${agent}`);
+    console.log(`📝 Context provided: ${context ? 'Yes' : 'No'}`);
 
-    // Create the RAG chain with custom system prompt if provided
-    const chain = await createRAGChain(systemPrompt);
+    // Create the RAG chain with custom system prompt and context if provided
+    const chain = await createRAGChain(systemPrompt, context);
 
     // Get response from chain
-    const response = await chain.invoke(message);
+    const response = await chain.invoke({
+      question: message,
+      session_context: context || ''
+    });
 
     console.log('✅ Agent response generated');
 
