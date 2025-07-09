@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { Ollama } from '@langchain/ollama';
-import athenaPrompt from '../../prompts/athena';
+import athenaPrompt from '../../prompts/athena'; // Modular prompt loading
 
 // Configuration
 const OLLAMA_BASE_URL = 'http://localhost:11434';
@@ -13,7 +13,7 @@ const llm = new Ollama({
   temperature: 0.7,
 });
 
-// Main API handler
+// Main API handler (modular, strict, future-proofed)
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });

@@ -1,10 +1,11 @@
-/** @type {import('tailwindcss').Config} */
-module.exports = {
+import type { Config } from 'tailwindcss';
+
+const config: Config = {
   content: [
-    './src/**/*.{js,ts,jsx,tsx,mdx}',
-    './pages/**/*.{js,ts,jsx,tsx,mdx}',
-    './components/**/*.{js,ts,jsx,tsx,mdx}',
-    './app/**/*.{js,ts,jsx,tsx,mdx}',
+    './src/**/*.{ts,tsx,mdx}',
+    './pages/**/*.{ts,tsx,mdx}',
+    './components/**/*.{ts,tsx,mdx}',
+    './app/**/*.{ts,tsx,mdx}',
   ],
   theme: {
     extend: {
@@ -29,10 +30,12 @@ module.exports = {
       keyframes: {
         glow: {
           '0%': { textShadow: '0 0 5px currentColor' },
-          '100%': { textShadow: '0 0 20px currentColor, 0 0 30px currentColor' }
-        }
-      }
+          '100%': { textShadow: '0 0 20px currentColor, 0 0 30px currentColor' },
+        },
+      },
     },
   },
   plugins: [],
-}
+};
+
+export default config;

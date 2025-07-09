@@ -1,18 +1,22 @@
 "use client";
+// Athena Multi-Agent AI Platform — Modular, TypeScript, Airbnb+Prettier
+
 import { useState, useRef, useEffect, useCallback } from "react";
 import AthenaBootup from "@/components/AthenaBootup";
 import AgentSwitcher, { Agent, AVAILABLE_AGENTS } from "@/components/AgentSwitcher";
 
 import ChatBubble from "@/components/ChatBubble";
 
+// Main Home Page — Modular, TypeScript, Airbnb+Prettier
 export default function Home() {
   const [messages, setMessages] = useState([
-    { 
-      id: 1, 
-      message: "Greetings, Commander. I'm ATHENA, your Intelligent Overseer Agent. I'm here to help you coordinate complex projects, manage tasks, and provide strategic insights. My memory systems are online and I'm ready to assist with whatever challenges you're facing. What's our first objective?", 
-      sender: "agent" 
+    {
+      id: 1,
+      message:
+        "Greetings, Commander. I'm ATHENA, your Intelligent Overseer Agent. I'm here to help you coordinate complex projects, manage tasks, and provide strategic insights. My memory systems are online and I'm ready to assist with whatever challenges you're facing. What's our first objective?",
+      sender: "agent",
     },
-  ]);
+  ] as Array<{ id: number; message: string; sender: "user" | "agent" | "system" }>);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [booted, setBooted] = useState(false);
@@ -29,10 +33,47 @@ export default function Home() {
     scrollToBottom();
   }, [messages]);
 
-  const handleSend = async () => {
+  const handleSend = useCallback(async () => {
     if (!input.trim()) return;
-    
     const userMsg = { id: messageId.current++, message: input, sender: "user" };
+    setMessages((msgs) => [...msgs, userMsg]);
+    setLoading(true);
+    const userText = input;
+    setInput("");
+    try {
+      const res = await fetch("/api/agent-simple", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: userText,
+          history: messages.slice(-4).map((m) => ({ role: m.sender, content: m.message })),
+        }),
+      });
+      if (!res.ok) {
+        throw new Error(`HTTP error! status: `);
+      }
+      const data = await res.json();
+      const agentMsg = {
+        id: messageId.current++,
+        message: data.reply || "I apologize, but I couldn't generate a response.",
+        sender: "agent",
+      };
+      setMessages((msgs) => [...msgs, agentMsg]);
+    } catch (e) {
+      console.error("Error:", e);
+      setMessages((msgs) => [
+        ...msgs,
+        {
+          id: messageId.current++,
+          message:
+            "I'm having trouble connecting right now. Please ensure Ollama is running and try again.",
+          sender: "agent",
+        },
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  }, [input, messages]);
     setMessages((msgs) => [...msgs, userMsg]);
     setLoading(true);
     const userText = input;
@@ -78,8 +119,8 @@ export default function Home() {
     // Add system message about agent switch
     const switchMsg = {
       id: messageId.current++,
-      message: `Switching to ${agent.name}. ${agent.purpose}`,
-      sender: "system" as const
+      message: `Switching to . `,
+      sender: "system" as const,
     };
     setMessages((msgs) => [...msgs, switchMsg]);
   }, []);
