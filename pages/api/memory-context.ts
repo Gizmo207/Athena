@@ -1,4 +1,5 @@
-import { AthenaMemoryManager } from "@/lib/memory/AthenaMemoryManager";
+
+import { AthenaMemoryManager } from "../../lib/memory/AthenaMemoryManager";
 
 export default async function handler(req, res) {
   try {
