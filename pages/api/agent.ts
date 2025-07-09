@@ -10,6 +10,7 @@ import { ConversationSummaryBufferMemory } from 'langchain/memory';
 import athenaPrompt from '../../prompts/athena';
 import path from 'path';
 import fs from 'fs';
+import { AthenaMemoryManager } from '../../lib/memory/AthenaMemoryManager';
 
 // Configuration
 const VECTOR_STORE_PATH = path.join(process.cwd(), 'athena-vectorstore');
@@ -128,6 +129,9 @@ Current message: {question} [/INST]`;
   return chain;
 }
 
+// Initialize memory manager
+const memoryManager = new AthenaMemoryManager();
+
 // Main API handler
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -147,12 +151,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.log(`📦 Processing message`);
     console.log(`� History length: ${history.length} messages`);
 
+    // Step 1: Detect and store new factual memories
+    if (/my favorite color is/i.test(message)) {
+      await memoryManager.addFact('user', message);
+    }
+
     // Build full prompt using Athena persona and provided history
-    const historyArray = req.body.history || [];
+    const historyArray = history;
+    // Step 2: Retrieve relevant memory context
+    const memoryContext = await memoryManager.getMemoryContext(message);
     const promptParts: string[] = [];
     promptParts.push('[INST]');
     promptParts.push(athenaPrompt);
     promptParts.push('');
+    if (memoryContext) {
+      promptParts.push(memoryContext);
+      promptParts.push('');
+    }
     historyArray.forEach((m: { role: string; content: string }) => {
       promptParts.push(`${m.role}: ${m.content}`);
     });
