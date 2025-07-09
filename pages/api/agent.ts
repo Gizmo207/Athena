@@ -3,9 +3,9 @@ import { Ollama } from '@langchain/ollama';
 import { OllamaEmbeddings } from '@langchain/ollama';
 import { HNSWLib } from '@langchain/community/vectorstores/hnswlib';
 import { Document } from '@langchain/core/documents';
-import { StringOutputParser } from '@langchain/core/output_parsers';
 import { RunnableSequence, RunnablePassthrough } from '@langchain/core/runnables';
 import { ChatPromptTemplate } from '@langchain/core/prompts';
+import { StringOutputParser } from '@langchain/core/output_parsers';
 import { ConversationSummaryBufferMemory } from 'langchain/memory';
 import athenaPrompt from '../../prompts/athena';
 import path from 'path';
@@ -86,17 +86,15 @@ function formatDocs(docs: Document[]): string {
   return docs.map(doc => `[${doc.metadata.timestamp}] ${doc.pageContent}`).join('\n\n');
 }
 
-// Create the RAG chain
+// Create the RAG chain using modular Athena persona and memory
 async function createRAGChain(customSystemPrompt?: string, sessionContext?: string) {
   const store = await getVectorStore();
-  const retriever = store.asRetriever({
-    k: 5, // Retrieve top 5 relevant documents
-  });
+  const retriever = store.asRetriever({ k: 5 });
 
-  const template = customSystemPrompt || `[INST] ${athenaPrompt}
+  const template = customSystemPrompt || `[INST]
+${athenaPrompt}
 
 📚 CONTEXTUAL MEMORY:
-Context from previous conversations:
 {context}
 
 Recent conversation history:
@@ -106,30 +104,27 @@ Additional session context:
 {session_context}
 
 Current message: {question} [/INST]`;
-
   const prompt = ChatPromptTemplate.fromTemplate(template);
 
-  // Simplified chain that directly formats the context
-  const formatContext = async (question: string) => {
-    const docs = await retriever.invoke(question);
-    const contextText = formatDocs(docs);
-    const chatHistory = conversationMemory.chatHistory || '';
-    
-    return {
-      context: contextText,
-      chat_history: chatHistory,
-      session_context: sessionContext || '',
-      question: question
-    };
-  };
-
   const chain = RunnableSequence.from([
-    formatContext,
+    {
+      context: retriever.pipe(formatDocs),
+      question: new RunnablePassthrough(),
+      chat_history: () => {
+        const raw = conversationMemory.chatHistory;
+        if (Array.isArray(raw)) {
+          return raw.map(m => `${m.role}: ${m.content}`).join('\n');
+        } else if (typeof raw === 'string') {
+          return raw;
+        }
+        return '';
+      },
+      session_context: () => sessionContext || '',
+    },
     prompt,
     llm,
     new StringOutputParser(),
   ]);
-
   return chain;
 }
 
@@ -142,31 +137,32 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   console.log('🚀 Athena RAG API called');
 
   try {
-    const { message, agent = 'athena', systemPrompt, context } = req.body;
+    // Expect message and full chat history from client
+    const { message, history = [] } = req.body;
 
     if (!message || typeof message !== 'string' || message.trim() === '') {
       return res.status(400).json({ error: 'Invalid message provided' });
     }
 
-    console.log(`📦 Processing message for agent: ${agent}`);
-    console.log(`📝 Context provided: ${context ? 'Yes' : 'No'}`);
-    console.log(`📄 Context length: ${context ? context.length : 0} characters`);
+    console.log(`📦 Processing message`);
+    console.log(`� History length: ${history.length} messages`);
 
-    // Create the RAG chain with custom system prompt and context if provided
-    console.log('🔧 Creating RAG chain...');
-    const chain = await createRAGChain(systemPrompt, context);
-
-    // Get response from chain - pass just the message since RunnablePassthrough expects the input directly
-    console.log('🤖 Invoking chain with message...');
-    
-    // Add timeout to prevent hanging
-    const responsePromise = chain.invoke(message);
-    const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('Request timeout after 30 seconds')), 30000)
-    );
-    
-    const response = await Promise.race([responsePromise, timeoutPromise]);
-
+    // Build full prompt using Athena persona and provided history
+    const historyArray = req.body.history || [];
+    const promptParts: string[] = [];
+    promptParts.push('[INST]');
+    promptParts.push(athenaPrompt);
+    promptParts.push('');
+    historyArray.forEach((m: { role: string; content: string }) => {
+      promptParts.push(`${m.role}: ${m.content}`);
+    });
+    promptParts.push('');
+    promptParts.push(`User: ${message}`);
+    promptParts.push('[/INST]');
+    const promptText = promptParts.join('\n');
+    console.log('🤖 Invoking LLM with full prompt...');
+    const raw = await llm.invoke(promptText);
+    const response = raw as string;
     console.log('✅ Agent response generated');
 
     // Save conversation to memory with agent info
@@ -178,11 +174,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Save to vector store for long-term memory
     const store = await getVectorStore();
     const conversationDoc = new Document({
-      pageContent: `User: ${message}\n${agent.toUpperCase()}: ${response}`,
+      pageContent: `User: ${message}\nATHENA: ${response}`,
       metadata: {
         timestamp: new Date().toISOString(),
         type: 'conversation',
-        agent: agent,
+        agent: 'athena',
         user_message: message,
         assistant_response: response,
       },
@@ -205,9 +201,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
+    // Return actual error message for debugging
     return res.status(500).json({ 
-      error: 'Internal server error',
-      details: error.message,
+      error: error.message || 'Internal server error',
     });
   }
 }
