@@ -12,6 +12,7 @@ import path from 'path';
 import fs from 'fs';
 import { AthenaMemoryManager } from '../../lib/memory/AthenaMemoryManager';
 import { sanitizeDates } from '../../lib/utils/dateSanitizer';
+import { storeConversationSummary, getRecentSummaries } from '../../lib/memory/conversationLogger';
 
 // Configuration
 const VECTOR_STORE_PATH = path.join(process.cwd(), 'athena-vectorstore');
@@ -157,9 +158,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       await memoryManager.addFact('user', message);
     }
 
-    // Build full prompt using Athena persona and provided history
+    // --- NEW: Retrieve recent conversation summaries ---
+    let recentSummaries: string[] = [];
+    try {
+      recentSummaries = await getRecentSummaries('user', 3);
+    } catch (err) {
+      console.warn('Could not retrieve recent summaries:', err);
+    }
+
+    // --- NEW: Build full prompt using Athena persona, memory, and summaries ---
     const historyArray = history;
-    // Step 2: Retrieve relevant memory context
     const memoryContext = await memoryManager.getMemoryContext(message);
     const promptParts: string[] = [];
     promptParts.push('[INST]');
@@ -167,6 +175,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     promptParts.push('');
     if (memoryContext) {
       promptParts.push(memoryContext);
+      promptParts.push('');
+    }
+    if (recentSummaries.length > 0) {
+      promptParts.push('Recent session summaries:');
+      recentSummaries.forEach((s, i) => promptParts.push(`Summary ${i + 1}: ${s}`));
       promptParts.push('');
     }
     historyArray.forEach((m: { role: string; content: string }) => {
@@ -195,6 +208,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Sanitize dates in Athena's response
     response = sanitizeDates(response, knownDates);
+
+    // --- NEW: Generate and store a session summary ---
+    try {
+      // Simple summary: use the last 4 messages for context
+      const summaryText = historyArray.slice(-4).map((m: any) => `${m.role}: ${m.content}`).join(' | ') + ` | user: ${message} | agent: ${response}`;
+      await storeConversationSummary('user', summaryText, new Date().toISOString());
+    } catch (err) {
+      console.warn('Could not store conversation summary:', err);
+    }
 
     // Save conversation to memory with agent info
     await conversationMemory.saveContext(
