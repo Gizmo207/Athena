@@ -25,6 +25,7 @@ export default function Home() {
   const [shortTermBuffer, setShortTermBuffer] = useState<Array<{ role: string; content: string }>>([]); // STM buffer
   const [sessionId, setSessionId] = useState(() => `session_${Date.now()}`); // Current session ID
   const [showGreeting, setShowGreeting] = useState(true); // Control greeting display
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false); // Sidebar collapse state
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageId = useRef(2);
@@ -167,6 +168,12 @@ export default function Home() {
     handleSessionChange(newSessionId);
   }, [handleSessionChange]);
 
+  // Handle sidebar collapse state
+  const handleSidebarCollapse = useCallback((isCollapsed: boolean) => {
+    console.log('Sidebar collapse state changed:', isCollapsed);
+    setSidebarCollapsed(isCollapsed);
+  }, []);
+
   // On boot, restore Athena's memory context and inject as system message
   useEffect(() => {
     async function injectMemoryContext() {
@@ -196,6 +203,7 @@ export default function Home() {
         currentSessionId={sessionId}
         onSessionChange={handleSessionChange}
         onNewSession={handleNewSession}
+        onCollapseChange={handleSidebarCollapse}
       />
       
       {/* Bootup Animation */}
@@ -205,9 +213,11 @@ export default function Home() {
       {booted && (
         <div 
           style={{
-            height: '100vh',
-            width: 'calc(100vw - 300px)', // Account for sidebar
-            marginLeft: '300px', // Account for sidebar width
+            position: 'fixed',
+            top: 0,
+            left: sidebarCollapsed ? '40px' : '300px',
+            right: 0,
+            bottom: 0,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -217,9 +227,14 @@ export default function Home() {
             backgroundSize: 'cover',
             backgroundPosition: 'center',
             backgroundRepeat: 'no-repeat',
-            backgroundColor: '#0a0a0f' // fallback color
+            backgroundColor: '#0a0a0f', // fallback color
+            transition: 'left 0.3s ease' // Smooth transition
           }}
         >
+          {/* Debug info - remove later */}
+          <div style={{ position: 'absolute', top: '10px', right: '10px', fontSize: '12px', color: '#00d4ff' }}>
+            Sidebar: {sidebarCollapsed ? 'Collapsed' : 'Expanded'}
+          </div>
           {/* Overlay for better text readability */}
           <div 
             style={{

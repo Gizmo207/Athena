@@ -13,15 +13,28 @@ interface SessionSidebarProps {
   currentSessionId: string;
   onSessionChange: (sessionId: string) => void;
   onNewSession: () => void;
+  onCollapseChange?: (isCollapsed: boolean) => void;
 }
 
 export default function SessionSidebar({ 
   currentSessionId, 
   onSessionChange, 
-  onNewSession 
+  onNewSession,
+  onCollapseChange
 }: SessionSidebarProps) {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [isCollapsed, setIsCollapsed] = useState(false);
+
+  // Notify parent when collapse state changes
+  const handleCollapseToggle = (collapsed: boolean) => {
+    setIsCollapsed(collapsed);
+    onCollapseChange?.(collapsed);
+  };
+
+  // Notify parent of initial state
+  useEffect(() => {
+    onCollapseChange?.(isCollapsed);
+  }, [isCollapsed, onCollapseChange]);
 
   // Load sessions from localStorage on mount
   useEffect(() => {
@@ -104,7 +117,7 @@ export default function SessionSidebar({
         }}
       >
         <button
-          onClick={() => setIsCollapsed(false)}
+          onClick={() => handleCollapseToggle(false)}
           style={{
             background: 'none',
             border: 'none',
@@ -167,7 +180,7 @@ export default function SessionSidebar({
           Sessions
         </h3>
         <button
-          onClick={() => setIsCollapsed(true)}
+          onClick={() => handleCollapseToggle(true)}
           style={{
             background: 'none',
             border: 'none',
