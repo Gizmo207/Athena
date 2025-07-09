@@ -244,25 +244,35 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Input area: input full width, submit below, voice controls right */}
+            {/* Input area: OpenAI-style textarea, voice controls right, submit below */}
             <div className="w-full flex flex-col gap-2">
-              <div className="flex w-full gap-2">
-                <input
-                  type="text"
+              <div className="relative w-full flex flex-row">
+                <textarea
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" && !loading) handleSend();
+                    if (e.key === "Enter" && !e.shiftKey && !loading) {
+                      e.preventDefault();
+                      handleSend();
+                    }
                   }}
                   placeholder={`Transmit message to ${currentAgent.name}...`}
-                  className="flex-1 px-4 py-3 rounded-xl border-2 border-athena-cyan/30 bg-athena-darker/80 text-white font-mono text-base focus:border-athena-cyan focus:shadow-neon-cyan focus:outline-none transition-all duration-300"
+                  rows={3}
+                  className="flex-1 resize-none px-5 py-4 rounded-3xl border-2 border-athena-cyan/30 bg-athena-darker/80 text-white font-mono text-lg focus:border-athena-cyan focus:shadow-neon-cyan focus:outline-none transition-all duration-300 pr-32 shadow-lg"
                   style={{
-                    backdropFilter: "blur(10px)"
+                    minHeight: 72,
+                    maxHeight: 180,
+                    backdropFilter: "blur(10px)",
+                    boxShadow: "0 2px 16px 0 rgba(0,212,255,0.10)"
                   }}
                   disabled={loading}
                 />
-                <div className="flex items-end">
-                  <VoiceControls 
+                {/* Voice controls absolutely positioned to the far right, vertically centered */}
+                <div
+                  className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center"
+                  style={{ zIndex: 2 }}
+                >
+                  <VoiceControls
                     onVoiceInput={handleVoiceInput}
                     onSpeakToggle={handleSpeakToggle}
                     className="relative"
@@ -272,13 +282,14 @@ export default function Home() {
               <button
                 onClick={handleSend}
                 disabled={loading || !input.trim()}
-                className={`w-full mt-1 px-6 py-3 rounded-xl border-2 font-mono text-base font-bold transition-all duration-300 ${
-                  loading || !input.trim() 
+                className={`w-full mt-1 px-6 py-4 rounded-3xl border-2 font-mono text-lg font-bold transition-all duration-300 ${
+                  loading || !input.trim()
                     ? 'border-gray-500/50 bg-gray-500/20 text-gray-500 cursor-not-allowed'
                     : 'border-athena-cyan bg-gradient-to-r from-athena-cyan to-athena-green text-black hover:shadow-neon-cyan hover:scale-105'
                 }`}
                 style={{
-                  backdropFilter: "blur(10px)"
+                  backdropFilter: "blur(10px)",
+                  boxShadow: "0 2px 16px 0 rgba(0,212,255,0.10)"
                 }}
               >
                 {loading ? "●●●" : "TRANSMIT"}
