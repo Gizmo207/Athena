@@ -1,5 +1,5 @@
 import { Document } from '@langchain/core/documents';
-import { getChromaStore } from '../vectorstore/chroma';
+import { getChromaStore } from '../vectorstore/file-store';
 import { Ollama } from '@langchain/ollama';
 
 /**

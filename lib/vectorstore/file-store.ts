@@ -32,7 +32,7 @@ class SimpleLocalEmbeddings extends Embeddings {
     
     // Normalize the vector
     const magnitude = Math.sqrt(vector.reduce((sum, val) => sum + val * val, 0));
-    return magnitude > 0 ? vector.map(val / magnitude) : vector;
+    return magnitude > 0 ? vector.map(val => val / magnitude) : vector;
   }
 }
 
@@ -44,6 +44,10 @@ class FileVectorStore extends VectorStore {
     super(embeddings, {});
     this.storePath = storePath;
     this.ensureStoreExists();
+  }
+
+  _vectorstoreType(): string {
+    return 'file-store';
   }
 
   private ensureStoreExists() {
