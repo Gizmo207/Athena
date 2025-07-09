@@ -1,4 +1,4 @@
-# 🚀 ATHENA Enhancement Summary
+rd /s /q .next# 🚀 ATHENA Enhancement Summary
 
 ## ✅ Completed Enhancements
 
