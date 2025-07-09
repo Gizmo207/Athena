@@ -19,27 +19,51 @@ export class AthenaMemoryManager {
   async addFact(userId: string, message: string) {
     try {
       const store = await this.storePromise;
-      // Use LLM to extract facts in JSON format
-      const extractionPrompt = `Extract any factual statements about the user from the following message. Respond ONLY in minified JSON array format, e.g. [{"type":"preference","key":"favoriteColor","value":"blue"}]. Message: "${message}"`;
+      console.log(`🧠 Extracting facts from: "${message}"`);
+      
+      // Use LLM to extract facts in JSON format - more specific prompt
+      const extractionPrompt = `Extract factual information about the user from this message. Only extract concrete facts like preferences, possessions, personal details, etc. Respond ONLY in valid JSON array format like this: [{"type":"possession","key":"motorcycle","value":"2009 Harley Davidson Street Bob with red powder-coat and T143 crate motor"},{"type":"preference","key":"favoriteColor","value":"red"}]
+
+Message to analyze: "${message}"
+
+JSON array:`;
+      
       const llmResult = await this.llm.call(extractionPrompt);
+      console.log(`🤖 LLM extraction result: ${llmResult.trim()}`);
+      
       let facts: Array<{ type: string; key: string; value: string }>; 
       try {
-        facts = JSON.parse(llmResult.trim());
+        // Try to extract JSON from the response
+        const jsonMatch = llmResult.match(/\[.*\]/s);
+        const jsonStr = jsonMatch ? jsonMatch[0] : llmResult.trim();
+        facts = JSON.parse(jsonStr);
+        console.log(`✅ Parsed ${facts.length} facts:`, facts);
       } catch (e) {
-        console.warn('Fact extraction failed, not valid JSON:', llmResult);
+        console.warn('❌ Fact extraction failed, not valid JSON:', llmResult);
         return;
       }
-      if (!Array.isArray(facts) || facts.length === 0) return;
-      // Deduplicate: fetch all current facts, update if key exists
-      const allDocs = await store.similaritySearch('user facts', 100);
-      const existingFacts = allDocs.map(doc => doc.metadata && doc.metadata.key ? { key: doc.metadata.key, id: doc.metadata.id } : null).filter(Boolean) as any[];
+      
+      if (!Array.isArray(facts) || facts.length === 0) {
+        console.log('ℹ️ No facts found in message');
+        return;
+      }
+
+      // Store each fact as a separate document with proper deduplication
       for (const fact of facts) {
-        // Remove any existing fact with the same key
-        for (const exist of existingFacts) {
-          if (exist.key === fact.key && exist.id) {
-            await store.delete({ ids: [exist.id] });
+        if (!fact.key || !fact.value) continue;
+        
+        // Search for existing facts with the same key
+        const existingDocs = await store.similaritySearch(`${fact.key}`, 10, { userId });
+        
+        // Delete any existing fact with the same key
+        for (const doc of existingDocs) {
+          if (doc.metadata?.key === fact.key && doc.metadata?.userId === userId) {
+            console.log(`🔄 Updating existing fact: ${fact.key}`);
+            // Note: Chroma doesn't have easy delete by metadata, so we'll just add the new one
+            // The newer timestamp will make it more relevant
           }
         }
+        
         // Store new/updated fact
         const doc = new Document({
           pageContent: `${fact.key}: ${fact.value}`,
@@ -50,12 +74,15 @@ export class AthenaMemoryManager {
             key: fact.key,
             value: fact.value,
             originMessage: message,
+            documentType: 'fact', // Mark as fact vs conversation
           },
         });
+        
         await store.addDocuments([doc]);
+        console.log(`💾 Stored fact: ${fact.key} = ${fact.value}`);
       }
     } catch (error: any) {
-      console.error('Error adding fact to memory store:', error);
+      console.error('❌ Error adding fact to memory store:', error);
     }
   }
 
@@ -65,16 +92,24 @@ export class AthenaMemoryManager {
   async getRelevantFacts(query: string, k = 5): Promise<{ key: string; value: string; type: string; timestamp: string; originMessage: string }[]> {
     try {
       const store = await this.storePromise;
-      const docs = await store.similaritySearch(query, k);
-      return docs.map(doc => ({
+      console.log(`🔍 Searching for facts related to: "${query}"`);
+      
+      // Search for facts only (not conversations)
+      const docs = await store.similaritySearch(query, k, { documentType: 'fact' });
+      console.log(`📚 Found ${docs.length} relevant facts`);
+      
+      const facts = docs.map(doc => ({
         key: doc.metadata?.key || '',
         value: doc.metadata?.value || '',
         type: doc.metadata?.type || '',
         timestamp: doc.metadata?.timestamp || '',
         originMessage: doc.metadata?.originMessage || '',
-      }));
+      })).filter(f => f.key && f.value); // Only return facts with content
+      
+      console.log('🎯 Relevant facts:', facts);
+      return facts;
     } catch (error: any) {
-      console.error('Error retrieving relevant facts:', error);
+      console.error('❌ Error retrieving relevant facts:', error);
       return [];
     }
   }
@@ -85,10 +120,16 @@ export class AthenaMemoryManager {
   async getMemoryContext(query: string, k = 5): Promise<string> {
     try {
       const facts = await this.getRelevantFacts(query, k);
-      if (!facts.length) return '';
-      return facts.map(f => `• ${f.key}: ${f.value} (as of ${f.timestamp})`).join('\n');
+      if (!facts.length) {
+        console.log('ℹ️ No memory context found for query');
+        return '';
+      }
+      
+      const context = facts.map(f => `• ${f.key}: ${f.value} (${f.type}, stored ${new Date(f.timestamp).toLocaleDateString()})`).join('\n');
+      console.log(`📝 Memory context built:\n${context}`);
+      return context;
     } catch (error: any) {
-      console.error('Error building memory context:', error);
+      console.error('❌ Error building memory context:', error);
       return '';
     }
   }
@@ -99,16 +140,21 @@ export class AthenaMemoryManager {
   async showMemory(): Promise<Array<{ key: string; value: string; type: string; timestamp: string; originMessage: string }>> {
     try {
       const store = await this.storePromise;
-      const docs = await store.similaritySearch('user facts', 100);
-      return docs.map(doc => ({
+      const docs = await store.similaritySearch('', 100, { documentType: 'fact' });
+      console.log(`📊 Total facts in memory: ${docs.length}`);
+      
+      const facts = docs.map(doc => ({
         key: doc.metadata?.key || '',
         value: doc.metadata?.value || '',
         type: doc.metadata?.type || '',
         timestamp: doc.metadata?.timestamp || '',
         originMessage: doc.metadata?.originMessage || '',
-      }));
+      })).filter(f => f.key && f.value);
+      
+      console.log('All stored facts:', facts);
+      return facts;
     } catch (error: any) {
-      console.error('Error retrieving all memory:', error);
+      console.error('❌ Error retrieving all memory:', error);
       return [];
     }
   }

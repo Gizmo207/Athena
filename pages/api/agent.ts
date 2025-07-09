@@ -45,21 +45,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'Invalid message provided' });
     }
 
-    console.log(`📦 Processing message`);
-    console.log(`� History length: ${history.length} messages`);
+    console.log(`📦 Processing message: "${message}"`);
+    console.log(`📜 History length: ${history.length} messages`);
 
     // Step 1: Detect and store new factual memories
+    console.log('🧠 Step 1: Extracting and storing facts...');
     await memoryManager.addFact('user', message);
 
     // --- Retrieve recent conversation summaries ---
+    console.log('📝 Step 2: Retrieving recent summaries...');
     let recentSummaries: string[] = [];
     try {
       recentSummaries = await getRecentSummaries('user', 3);
+      console.log(`📋 Found ${recentSummaries.length} recent summaries`);
     } catch (err) {
       console.warn('Could not retrieve recent summaries:', err);
     }
 
     // --- Build full prompt using Athena persona, memory, and summaries ---
+    console.log('🧠 Step 3: Building memory context...');
     const historyArray = history;
     const memoryContext = await memoryManager.getMemoryContext(message);
     const promptParts: string[] = [];
