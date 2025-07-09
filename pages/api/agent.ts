@@ -92,7 +92,7 @@ async function createRAGChain(customSystemPrompt?: string, sessionContext?: stri
     k: 5, // Retrieve top 5 relevant documents
   });
 
-  const template = customSystemPrompt || `You are ATHENA, an advanced AI Overseer Agent with the following core identity and capabilities:
+  const template = `[INST] You are ATHENA, an advanced AI Overseer Agent with the following core identity and capabilities:
 
 🧠 IDENTITY & ROLE:
 - You are Athena, named after the Greek goddess of wisdom, warfare strategy, and intelligence
@@ -125,16 +125,14 @@ async function createRAGChain(customSystemPrompt?: string, sessionContext?: stri
 - Proactive in suggesting improvements and optimizations
 
 📚 CONTEXTUAL MEMORY:
-Use the following context from our previous conversations:
+Context from previous conversations:
 {context}
 
-Recent conversation context:
+Recent conversation history:
 {chat_history}
 
-Additional conversation context from this session:
+Additional session context:
 {session_context}
-
-Current message: {question}
 
 🎯 RESPONSE GUIDELINES:
 - Reference relevant past conversations to maintain continuity
@@ -145,17 +143,26 @@ Current message: {question}
 - Maintain your role as an overseer while being helpful and accessible
 - If coordinating multiple tasks, provide clear organization and prioritization
 
-Response as ATHENA:`;
+Current message: {question} [/INST]`;
 
   const prompt = ChatPromptTemplate.fromTemplate(template);
 
+  // Simplified chain that directly formats the context
+  const formatContext = async (question: string) => {
+    const docs = await retriever.invoke(question);
+    const contextText = formatDocs(docs);
+    const chatHistory = conversationMemory.chatHistory || '';
+    
+    return {
+      context: contextText,
+      chat_history: chatHistory,
+      session_context: sessionContext || '',
+      question: question
+    };
+  };
+
   const chain = RunnableSequence.from([
-    {
-      context: retriever.pipe(formatDocs),
-      question: new RunnablePassthrough(),
-      chat_history: () => conversationMemory.chatHistory || '',
-      session_context: () => sessionContext || '',
-    },
+    formatContext,
     prompt,
     llm,
     new StringOutputParser(),
@@ -181,15 +188,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     console.log(`📦 Processing message for agent: ${agent}`);
     console.log(`📝 Context provided: ${context ? 'Yes' : 'No'}`);
+    console.log(`📄 Context length: ${context ? context.length : 0} characters`);
 
     // Create the RAG chain with custom system prompt and context if provided
+    console.log('🔧 Creating RAG chain...');
     const chain = await createRAGChain(systemPrompt, context);
 
-    // Get response from chain
-    const response = await chain.invoke({
-      question: message,
-      session_context: context || ''
-    });
+    // Get response from chain - pass just the message since RunnablePassthrough expects the input directly
+    console.log('🤖 Invoking chain with message...');
+    
+    // Add timeout to prevent hanging
+    const responsePromise = chain.invoke(message);
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Request timeout after 30 seconds')), 30000)
+    );
+    
+    const response = await Promise.race([responsePromise, timeoutPromise]);
 
     console.log('✅ Agent response generated');
 
