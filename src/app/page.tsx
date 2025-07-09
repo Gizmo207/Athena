@@ -22,6 +22,8 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [booted, setBooted] = useState(false);
   const [currentAgent, setCurrentAgent] = useState<Agent>(AVAILABLE_AGENTS[0]); // Start with ATHENA
+  const [shortTermBuffer, setShortTermBuffer] = useState<Array<{ role: string; content: string }>>([]); // STM buffer
+  const [sessionId] = useState(() => `session_${Date.now()}`); // Unique session ID
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageId = useRef(2);
@@ -41,19 +43,30 @@ export default function Home() {
     setLoading(true);
     const userText = input;
     setInput("");
+
+    // Update STM buffer with user message
+    const newSTM = [...shortTermBuffer, { role: 'user', content: userText }].slice(-5);
+
     try {
       const res = await fetch("/api/agent-simple", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: userText,
-          history: messages.slice(-4).map((m) => ({ role: m.sender, content: m.message })),
+          shortTermBuffer: newSTM,
+          userId: sessionId,
         }),
       });
       if (!res.ok) {
-        throw new Error(`HTTP error! status: `);
+        throw new Error(`HTTP error! status: ${res.status}`);
       }
       const data = await res.json();
+      
+      // Update STM buffer with server response
+      if (data.shortTermBuffer) {
+        setShortTermBuffer(data.shortTermBuffer);
+      }
+      
       const agentMsg = {
         id: messageId.current++,
         message: data.reply || "I apologize, but I couldn't generate a response.",
@@ -74,7 +87,7 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
-  }, [input, messages]);
+  }, [input, shortTermBuffer, sessionId]);
 
   const handleAgentChange = useCallback((agent: Agent) => {
     setCurrentAgent(agent);

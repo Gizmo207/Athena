@@ -38,38 +38,44 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   console.log('🚀 Athena RAG API called');
 
   try {
-    // Expect message and full chat history from client
-    const { message, history = [] } = req.body;
+    // Expect message, shortTermBuffer, and userId from client
+    const { message, shortTermBuffer = [], userId = 'user' } = req.body;
 
     if (!message || typeof message !== 'string' || message.trim() === '') {
       return res.status(400).json({ error: 'Invalid message provided' });
     }
 
     console.log(`📦 Processing message: "${message}"`);
-    console.log(`📜 History length: ${history.length} messages`);
+    console.log(`📜 STM buffer length: ${shortTermBuffer.length} messages`);
 
     // Step 1: Detect and store new factual memories
     console.log('🧠 Step 1: Extracting and storing facts...');
-    await memoryManager.addFact('user', message);
+    await memoryManager.addFact(userId, message);
 
     // --- Retrieve recent conversation summaries ---
     console.log('📝 Step 2: Retrieving recent summaries...');
     let recentSummaries: string[] = [];
     try {
-      recentSummaries = await getRecentSummaries('user', 3);
+      recentSummaries = await getRecentSummaries(userId, 3);
       console.log(`📋 Found ${recentSummaries.length} recent summaries`);
     } catch (err) {
       console.warn('Could not retrieve recent summaries:', err);
     }
 
-    // --- Build full prompt using Athena persona, memory, and summaries ---
+    // --- Build full prompt using short-term buffer and long-term memory ---
     console.log('🧠 Step 3: Building memory context...');
-    const historyArray = history;
     const memoryContext = await memoryManager.getMemoryContext(message);
+    
+    // Build short-term conversation context
+    const stmContext = shortTermBuffer.map((m: any) => 
+      `${m.role === 'user' ? 'YOU' : 'ATHENA'}: ${m.content}`
+    ).join('\n');
+
     const promptParts: string[] = [];
     promptParts.push('[INST]');
     promptParts.push(athenaPrompt);
     promptParts.push('');
+    
     if (memoryContext) {
       promptParts.push('📚 LONG-TERM MEMORY (retrieved facts):');
       promptParts.push(memoryContext);
@@ -78,16 +84,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     } else {
       console.log('ℹ️ No memory context found');
     }
+    
     if (recentSummaries.length > 0) {
       promptParts.push('📝 RECENT SESSION SUMMARIES:');
       recentSummaries.forEach((s, i) => promptParts.push(`Summary ${i + 1}: ${s}`));
       promptParts.push('');
     }
-    historyArray.forEach((m: { role: string; content: string }) => {
-      promptParts.push(`${m.role}: ${m.content}`);
-    });
-    promptParts.push('');
-    promptParts.push(`User: ${message}`);
+    
+    if (stmContext) {
+      promptParts.push('📋 CONVERSATION CONTEXT:');
+      promptParts.push(stmContext);
+      promptParts.push('');
+    }
+    
+    promptParts.push(`YOU: ${message}`);
     promptParts.push('[/INST]');
     const promptText = promptParts.join('\n');
     console.log('🤖 Invoking LLM with full prompt...');
@@ -110,24 +120,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Sanitize dates in Athena's response
     response = sanitizeDates(response, knownDates);
 
+    // Update short-term buffer with the new exchange
+    const updatedSTM = [...shortTermBuffer, 
+      { role: 'user', content: message },
+      { role: 'assistant', content: response }
+    ].slice(-5); // Keep only last 5 messages (about 2-3 exchanges)
+
     // --- Generate and store a session summary ---
     try {
-      // Simple summary: use the last 4 messages for context
-      const summaryText = historyArray.slice(-4).map((m: any) => `${m.role}: ${m.content}`).join(' | ') + ` | user: ${message} | agent: ${response}`;
-      await storeConversationSummary('user', summaryText, new Date().toISOString());
+      // Simple summary: use the updated STM for context
+      const summaryText = updatedSTM.map((m: any) => `${m.role}: ${m.content}`).join(' | ');
+      await storeConversationSummary(userId, summaryText, new Date().toISOString());
     } catch (err) {
       console.warn('Could not store conversation summary:', err);
     }
 
-    // Save conversation to memory with agent info
-    await conversationMemory.saveContext(
-      { input: message },
-      { output: response }
-    );
+    console.log('💾 Response completed and STM updated');
 
-    console.log('💾 Response completed and saved to short-term memory');
-
-    return res.status(200).json({ reply: response });
+    return res.status(200).json({ 
+      reply: response, 
+      shortTermBuffer: updatedSTM 
+    });
 
   } catch (error: any) {
     console.error('💥 API Error:', error);
