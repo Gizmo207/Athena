@@ -196,17 +196,19 @@ export default function Home() {
 
 
   return (
-    <main style={{ 
-      position: 'fixed', 
-      top: 0, 
-      left: 0, 
-      right: 0, 
-      bottom: 0, 
-      background: '#0a0a0f', 
-      margin: 0, 
-      padding: 0,
-      overflow: 'hidden'
-    }}>
+    <div 
+      style={{ 
+        position: 'fixed', 
+        top: 0, 
+        left: 0, 
+        right: 0, 
+        bottom: 0, 
+        background: '#0a0a0f', 
+        margin: 0, 
+        padding: 0,
+        overflow: 'hidden'
+      }}
+    >
       {/* Session Sidebar */}
       <SessionSidebar
         currentSessionId={sessionId}
@@ -423,6 +425,6 @@ export default function Home() {
           </div>
         </div>
       )}
-    </main>
+    </div>
   );
 }
