@@ -24,6 +24,13 @@ export default function SessionSidebar({
 }: SessionSidebarProps) {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // Filter sessions based on search term
+  const filteredSessions = sessions.filter(session => 
+    session.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    session.lastMessage.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   // Notify parent when collapse state changes
   const handleCollapseToggle = (collapsed: boolean) => {
@@ -193,25 +200,63 @@ export default function SessionSidebar({
         </button>
       </div>
 
-      {/* New Session Button */}
-      <div style={{ padding: '15px' }}>
+      {/* Action Buttons */}
+      <div style={{ padding: '15px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
         <button
           onClick={onNewSession}
           style={{
             width: '100%',
             padding: '12px',
-            background: 'rgba(0,212,255,0.1)',
-            border: '1px solid #00d4ff',
-            borderRadius: '6px',
-            color: '#00d4ff',
+            background: 'linear-gradient(135deg, #00d4ff, #0099cc)',
+            border: 'none',
+            borderRadius: '8px',
+            color: 'white',
             cursor: 'pointer',
             fontFamily: 'monospace',
             fontSize: '14px',
-            fontWeight: 'bold'
+            fontWeight: 'bold',
+            boxShadow: '0 2px 8px rgba(0,212,255,0.3)',
+            transition: 'all 0.2s ease'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'linear-gradient(135deg, #0099cc, #00d4ff)';
+            e.currentTarget.style.transform = 'translateY(-1px)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'linear-gradient(135deg, #00d4ff, #0099cc)';
+            e.currentTarget.style.transform = 'translateY(0)';
           }}
         >
-          + New Session
+          + New Chat
         </button>
+        
+        {/* Search Input */}
+        <input
+          type="text"
+          placeholder="Search chats..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          style={{
+            width: '100%',
+            padding: '10px',
+            background: 'rgba(26,26,46,0.8)',
+            border: '1px solid rgba(0,212,255,0.3)',
+            borderRadius: '6px',
+            color: '#e0f7ff',
+            fontFamily: 'monospace',
+            fontSize: '12px',
+            outline: 'none',
+            boxSizing: 'border-box'
+          }}
+          onFocus={(e) => {
+            e.currentTarget.style.borderColor = '#00d4ff';
+            e.currentTarget.style.boxShadow = '0 0 0 2px rgba(0,212,255,0.2)';
+          }}
+          onBlur={(e) => {
+            e.currentTarget.style.borderColor = 'rgba(0,212,255,0.3)';
+            e.currentTarget.style.boxShadow = 'none';
+          }}
+        />
       </div>
 
       {/* Sessions List */}
@@ -220,7 +265,17 @@ export default function SessionSidebar({
         overflowY: 'auto',
         padding: '0 15px'
       }}>
-        {sessions.map(session => (
+        {filteredSessions.length === 0 && searchTerm ? (
+          <div style={{
+            padding: '20px',
+            textAlign: 'center',
+            color: '#777',
+            fontSize: '12px'
+          }}>
+            No chats found
+          </div>
+        ) : (
+          filteredSessions.map(session => (
           <div
             key={session.id}
             onClick={() => onSessionChange(session.id)}
@@ -263,7 +318,8 @@ export default function SessionSidebar({
               {session.lastMessage || 'No messages yet'}
             </div>
           </div>
-        ))}
+        ))
+        )}
       </div>
 
       {/* Footer */}

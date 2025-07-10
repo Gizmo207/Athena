@@ -170,7 +170,6 @@ export default function Home() {
 
   // Handle sidebar collapse state
   const handleSidebarCollapse = useCallback((isCollapsed: boolean) => {
-    console.log('Sidebar collapse state changed:', isCollapsed);
     setSidebarCollapsed(isCollapsed);
   }, []);
 
@@ -197,7 +196,17 @@ export default function Home() {
 
 
   return (
-    <>
+    <main style={{ 
+      position: 'fixed', 
+      top: 0, 
+      left: 0, 
+      right: 0, 
+      bottom: 0, 
+      background: '#0a0a0f', 
+      margin: 0, 
+      padding: 0,
+      overflow: 'hidden'
+    }}>
       {/* Session Sidebar */}
       <SessionSidebar
         currentSessionId={sessionId}
@@ -223,44 +232,31 @@ export default function Home() {
             justifyContent: 'center',
             fontFamily: 'monospace',
             color: 'white',
-            backgroundImage: `url('/images/athena-bg.png')`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-            backgroundRepeat: 'no-repeat',
-            backgroundColor: '#0a0a0f', // fallback color
-            transition: 'left 0.3s ease' // Smooth transition
+            backgroundColor: '#0a0a0f',
+            transition: 'left 0.3s ease',
+            overflowY: 'auto',
+            zIndex: 1
           }}
         >
-          {/* Debug info - remove later */}
-          <div style={{ position: 'absolute', top: '10px', right: '10px', fontSize: '12px', color: '#00d4ff' }}>
-            Sidebar: {sidebarCollapsed ? 'Collapsed' : 'Expanded'}
-          </div>
-          {/* Overlay for better text readability */}
-          <div 
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              background: 'linear-gradient(135deg, rgba(10,10,15,0.8), rgba(26,26,46,0.7), rgba(22,33,62,0.8))'
-            }}
-          />
-          
           {/* Chat Container */}
           <div 
+            className="chat-container"
             style={{
               position: 'relative',
-              zIndex: 10,
+              zIndex: 100,
               maxWidth: 700, 
               width: '90%',
+              height: 'calc(100vh - 40px)',
+              minHeight: '600px',
               border: "2px solid #00d4ff", 
               borderRadius: 16, 
               padding: 24, 
               background: "rgba(26,26,46,0.95)", 
-              minHeight: 680, // Increased to prevent cutoff
               boxShadow: "0 0 30px rgba(0,212,255,0.2), 0 8px 32px rgba(0,0,0,0.5)",
-              backdropFilter: "blur(10px)"
+              backdropFilter: "blur(10px)",
+              display: 'flex',
+              flexDirection: 'column',
+              margin: '20px 0'
             }}
           >
             {/* Header with Enhanced Athena branding and Agent Switcher */}
@@ -268,7 +264,7 @@ export default function Home() {
               textAlign: "center", 
               marginBottom: 24, 
               paddingBottom: 20, 
-              borderBottom: "2px solid rgba(0,212,255,0.3)" 
+              borderBottom: "2px solid rgba(0,212,255,0.3)"
             }}>
               <div className="flex justify-between items-center mb-4">
                 <div className="flex-1 flex justify-start">
@@ -326,7 +322,7 @@ export default function Home() {
             {/* Messages container */}
             <div
               style={{
-                height: 440,
+                flex: 1,
                 overflowY: "auto",
                 marginBottom: 24,
                 padding: 0,
@@ -335,6 +331,7 @@ export default function Home() {
                 display: 'flex',
                 flexDirection: 'column',
                 gap: 0,
+                minHeight: 0
               }}
             >
               {/* Staggered chat bubbles, not full width, with clear separation */}
@@ -426,6 +423,6 @@ export default function Home() {
           </div>
         </div>
       )}
-    </>
+    </main>
   );
 }
