@@ -1,8 +1,0 @@
-{
-  "scripts": {
-    "test:validation": "tsx scripts/system-validation.ts",
-    "test:health": "curl -X GET http://localhost:3000/api/health",
-    "test:memory": "curl -X GET \"http://localhost:3000/api/memory-context?query=test&userId=peter_bernaiche\"",
-    "test:athena": "curl -X POST http://localhost:3000/api/athena-mistral -H \"Content-Type: application/json\" -d '{\"message\": \"Hello Athena, test message\", \"userId\": \"peter_bernaiche\"}'"
-  }
-}
