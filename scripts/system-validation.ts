@@ -1,8 +1,12 @@
+import dotenv from 'dotenv';
 import { AthenaMemoryManager } from '../lib/memory-manager';
 import { testMistralConnection } from '../lib/mistral-client';
 import { testQdrantConnection } from '../lib/qdrant-client';
 import { testEmbeddingConnection } from '../lib/embedding-client';
 import { routeToAgent } from '../lib/config';
+
+// Load environment variables
+dotenv.config({ path: '.env.local' });
 
 /**
  * Comprehensive System Validation Test

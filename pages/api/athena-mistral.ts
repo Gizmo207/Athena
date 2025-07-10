@@ -73,12 +73,14 @@ interface ApiRequest {
   message: string;
   shortTermBuffer: ChatMessage[];
   userId: string;
+  memoryOnly?: boolean;
 }
 
 interface ApiResponse {
   reply: string;
   shortTermBuffer: ChatMessage[];
   factsExtracted?: number;
+  memoryContext?: string;
 }
 
 export default async function handler(
@@ -92,9 +94,29 @@ export default async function handler(
   console.log('🚀 Athena Mistral API called');
 
   try {
-    const { message, shortTermBuffer = [], userId = 'user' }: ApiRequest = req.body;
+    const { message, shortTermBuffer = [], userId = 'user', memoryOnly = false }: ApiRequest = req.body;
 
-    // Validation
+    // Handle memory-only requests (for session restore)
+    if (memoryOnly || message === 'SYSTEM_MEMORY_CONTEXT_REQUEST') {
+      console.log('🧠 Memory-only request detected, retrieving memory context...');
+      try {
+        const memoryContext = await memoryManager.buildMemoryContext('', userId);
+        return res.status(200).json({ 
+          memoryContext: memoryContext || '',
+          reply: '',
+          shortTermBuffer: []
+        });
+      } catch (error) {
+        console.error('❌ Failed to retrieve memory context:', error);
+        return res.status(200).json({ 
+          memoryContext: '',
+          reply: '',
+          shortTermBuffer: []
+        });
+      }
+    }
+
+    // Validation for regular requests
     if (!message || typeof message !== 'string' || message.trim() === '') {
       return res.status(400).json({ error: 'Invalid message provided' });
     }

@@ -309,7 +309,30 @@ export class AthenaMemoryManager {
    * Build comprehensive memory context from search query
    */
   async buildMemoryContext(query: string, userId: string): Promise<string> {
-    try {
+    try {        // For empty queries (session restore), just get recent general context
+        if (!query || query.trim() === '') {
+          console.log('🔍 Retrieving general memory context for session restore...');
+          try {
+            const recentFacts = await this.getRecentMemoryFacts(userId, 10);
+            
+            if (recentFacts.length === 0) {
+              console.log('ℹ️ No memory facts found for session restore');
+              return '';
+            }
+
+            // Format recent facts
+            const contextParts: string[] = [];
+            recentFacts.forEach((fact: MemoryFact) => {
+              contextParts.push(`• ${fact.key}: ${fact.value} (${fact.type})`);
+            });
+
+            return `RECENT MEMORY CONTEXT:\n${contextParts.join('\n')}`;
+          } catch (error) {
+            console.warn('⚠️ Could not retrieve memory facts for session restore:', error);
+            return '';
+          }
+        }
+
       const context = await this.getMemoryContext(query, userId, 15);
       
       if (context.facts.length === 0) {
@@ -429,6 +452,33 @@ export class AthenaMemoryManager {
       };
     } catch (error) {
       throw new Error(`Memory pruning test failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Get recent memory facts for session restore (without requiring a search query)
+   */
+  async getRecentMemoryFacts(userId: string, limit: number = 10): Promise<MemoryFact[]> {
+    try {
+      console.log(`📋 Retrieving recent memory facts for user: ${userId}`);
+      
+      // Get all facts for the user
+      const allFacts = await getAllMemoryFacts(userId);
+      
+      if (allFacts.length === 0) {
+        return [];
+      }
+
+      // Sort by timestamp (most recent first) and limit
+      const recentFacts = allFacts
+        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+        .slice(0, limit);
+
+      console.log(`📋 Found ${recentFacts.length} recent facts`);
+      return recentFacts;
+    } catch (error) {
+      console.error('❌ Failed to retrieve recent memory facts:', error);
+      return [];
     }
   }
 }

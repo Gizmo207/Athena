@@ -36,7 +36,8 @@
     "lib/**/*.tsx",
     "pages/**/*.ts",
     "pages/**/*.tsx",
-    "prompts/**/*.ts",
+    "scripts/**/*.ts",
+    "types/**/*.ts",
     ".next/types/**/*.ts"
   ],
   "exclude": [

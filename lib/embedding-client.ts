@@ -69,34 +69,7 @@ function generateSimpleEmbedding(text: string): number[] {
   return embedding;
 }
 
-/**
- * Generate embeddings using OpenAI API as fallback
- */
-async function generateOpenAIEmbedding(text: string): Promise<number[]> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    throw new Error('OpenAI API key not available');
-  }
 
-  const response = await fetch('https://api.openai.com/v1/embeddings', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'text-embedding-ada-002',
-      input: text,
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`OpenAI API error: ${response.statusText}`);
-  }
-
-  const data = await response.json();
-  return data.data[0].embedding;
-}
 
 /**
  * Generate embeddings using Mistral API
@@ -141,7 +114,6 @@ export async function generateEmbedding(text: string): Promise<number[]> {
   // Try different embedding methods in order of preference
   const methods = [
     { name: 'Mistral', fn: generateMistralEmbedding },
-    { name: 'OpenAI', fn: generateOpenAIEmbedding },
     { name: 'Transformers', fn: generateTransformerEmbedding },
     { name: 'Simple', fn: generateSimpleEmbedding },
   ];
