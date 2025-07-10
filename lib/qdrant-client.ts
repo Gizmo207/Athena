@@ -95,7 +95,7 @@ export async function initializeQdrantCollection(): Promise<void> {
 }
 
 /**
- * Store a memory fact in Qdrant
+ * Store a memory fact in Qdrant with retry logic
  */
 export async function storeMemoryFact(
   fact: MemoryFact,
@@ -104,7 +104,7 @@ export async function storeMemoryFact(
   try {
     console.log(`💾 Storing fact: ${fact.key} = ${fact.value}`);
     
-    await qdrantClient.upsert(COLLECTION_NAME, {
+    await withRetry(() => qdrantClient.upsert(COLLECTION_NAME, {
       wait: true,
       points: [
         {
@@ -120,12 +120,12 @@ export async function storeMemoryFact(
           },
         },
       ],
-    });
+    }));
     
     console.log('✅ Memory fact stored successfully');
-  } catch (error) {
+  } catch (error: any) {
     console.error('❌ Failed to store memory fact:', error);
-    throw error;
+    throw new Error(`Failed to store memory fact: ${error.message}`);
   }
 }
 
