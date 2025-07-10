@@ -67,7 +67,7 @@ export async function chatCompletion(
       }
 
       console.log('✅ Mistral response received successfully');
-      return content.trim();
+      return typeof content === 'string' ? content.trim() : String(content).trim();
 
     } catch (error: any) {
       lastError = error;

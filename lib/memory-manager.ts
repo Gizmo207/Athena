@@ -20,7 +20,7 @@ Extract key facts from this conversation turn as a JSON array. Only include fact
 
 Format each fact as: {"type": "preference|fact|context|personal_detail|possession", "key": "brief_identifier", "value": "detailed_content"}
 
-Types:
+Ty pes:
 - preference: User likes/dislikes, opinions, choices
 - fact: Specific information about user's life, work, experiences
 - context: Situational information, current state
