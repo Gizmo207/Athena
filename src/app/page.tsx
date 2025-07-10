@@ -50,7 +50,7 @@ export default function Home() {
     const newSTM = [...shortTermBuffer, { role: 'user', content: userText }].slice(-5);
 
     try {
-      const res = await fetch("/api/agent-simple", {
+      const res = await fetch("/api/athena-mistral", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -87,7 +87,7 @@ export default function Home() {
         {
           id: messageId.current++,
           message:
-            "I'm having trouble connecting right now. Please ensure Ollama is running and try again.",
+            "I'm having trouble connecting to the AI service right now. Please try again in a moment.",
           sender: "agent",
         },
       ]);
