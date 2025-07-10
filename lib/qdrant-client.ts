@@ -88,7 +88,7 @@ export async function initializeQdrantCollection(): Promise<void> {
         console.warn(`⚠️ Collection vector size mismatch: expected ${VECTOR_SIZE}, got ${collectionInfo.config?.params?.vectors?.size}`);
       }
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('❌ Failed to initialize Qdrant collection:', error);
     throw new Error(`Qdrant initialization failed: ${error.message}`);
   }
