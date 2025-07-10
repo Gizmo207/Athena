@@ -187,6 +187,37 @@ export function cosineSimilarity(a: number[], b: number[]): number {
 }
 
 /**
+ * Test embedding connection with detailed results
+ */
+export async function testEmbeddingConnection(): Promise<{ success: boolean; details: any }> {
+  try {
+    const startTime = Date.now();
+    const testEmbedding = await generateEmbedding('Test connection');
+    const endTime = Date.now();
+    
+    return {
+      success: true,
+      details: {
+        responseTime: endTime - startTime,
+        embeddingDimension: testEmbedding.length,
+        modelName: MODEL_NAME,
+        provider: 'Transformers.js',
+        firstFewValues: testEmbedding.slice(0, 5),
+      }
+    };
+  } catch (error) {
+    return {
+      success: false,
+      details: {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        modelName: MODEL_NAME,
+        provider: 'Transformers.js',
+      }
+    };
+  }
+}
+
+/**
  * Validate embedding setup
  */
 export async function validateEmbeddingSetup(): Promise<boolean> {

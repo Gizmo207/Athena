@@ -7,6 +7,7 @@ import {
   MemoryFact
 } from './qdrant-client';
 import { generateEmbedding } from './embedding-client';
+import { CONFIG } from './config';
 import { v4 as uuidv4 } from 'uuid';
 
 // Fact extraction prompt template
@@ -66,6 +67,79 @@ export class AthenaMemoryManager {
   }
 
   /**
+   * Validate fact structure
+   */
+  private validateFact(fact: any): boolean {
+    if (!fact || typeof fact !== 'object') return false;
+    
+    // Required fields
+    if (!fact.type || !fact.key || !fact.value) return false;
+    
+    // Type validation
+    const validTypes = ['preference', 'fact', 'context', 'personal_detail', 'possession'];
+    if (!validTypes.includes(fact.type)) return false;
+    
+    // Content validation
+    if (typeof fact.key !== 'string' || typeof fact.value !== 'string') return false;
+    
+    // Length validation
+    if (fact.value.length < 5 || fact.value.length > 500) return false;
+    
+    return true;
+  }
+
+  /**
+   * Calculate fact quality score
+   */
+  private calculateFactQuality(factText: string): number {
+    const length = Math.min(factText.length / 100, 1);
+    const uniqueness = this.calculateUniqueness(factText);
+    const actionability = this.containsActionableInfo(factText);
+    
+    return (length * 0.3) + (uniqueness * 0.4) + (actionability * 0.3);
+  }
+
+  /**
+   * Calculate text uniqueness score
+   */
+  private calculateUniqueness(text: string): number {
+    const commonWords = ['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by'];
+    const words = text.toLowerCase().split(/\s+/);
+    const uniqueWords = words.filter(word => !commonWords.includes(word));
+    return Math.min(uniqueWords.length / words.length, 1);
+  }
+
+  /**
+   * Check if text contains actionable information
+   */
+  private containsActionableInfo(text: string): number {
+    const actionablePatterns = [
+      /prefers?|likes?|dislikes?|wants?|needs?/i,
+      /owns?|has|possesses?/i,
+      /works? at|employed by|position/i,
+      /lives? in|located|address/i,
+      /birthday|anniversary|date/i,
+      /goal|objective|plan/i
+    ];
+    
+    const matches = actionablePatterns.filter(pattern => pattern.test(text));
+    return Math.min(matches.length / 3, 1);
+  }
+
+  /**
+   * Check if fact is low value
+   */
+  private isLowValueFact(text: string): boolean {
+    const lowValuePatterns = [
+      /^(thank you|thanks|hello|hi|goodbye|bye|yes|no|ok|okay|alright|sure|fine)\.?$/i,
+      /^(what|how|when|where|why)\s*\?$/i,
+      /^.{1,4}$/,  // Very short responses
+    ];
+    
+    return lowValuePatterns.some(pattern => pattern.test(text.trim()));
+  }
+
+  /**
    * Extract and store facts from a conversation turn
    */
   async extractAndStoreFacts(turn: ConversationTurn): Promise<MemoryFact[]> {
@@ -98,25 +172,43 @@ export class AthenaMemoryManager {
       // Convert to MemoryFact objects and store
       const memoryFacts: MemoryFact[] = [];
       for (const fact of extractedFacts) {
-        if (fact.key && fact.value && fact.type) {
-          const memoryFact: MemoryFact = {
-            id: uuidv4(),
-            type: fact.type,
-            key: fact.key,
-            value: fact.value,
-            timestamp: new Date().toISOString(),
-            originMessage: turn.userMessage,
-            userId: turn.userId,
-          };
-
-          // Generate embedding for the fact
-          const factText = `${fact.key}: ${fact.value}`;
-          const embedding = await generateEmbedding(factText);
-          
-          // Store in Qdrant
-          await storeMemoryFact(memoryFact, embedding);
-          memoryFacts.push(memoryFact);
+        // Validate fact structure
+        if (!this.validateFact(fact)) {
+          console.warn('⚠️ Invalid fact structure, skipping:', fact);
+          continue;
         }
+
+        // Check fact quality
+        const factText = `${fact.key}: ${fact.value}`;
+        const qualityScore = this.calculateFactQuality(factText);
+        
+        if (qualityScore < 0.3) {
+          console.warn('⚠️ Low quality fact, skipping:', fact);
+          continue;
+        }
+
+        // Check for low-value patterns
+        if (this.isLowValueFact(factText)) {
+          console.warn('⚠️ Low value fact, skipping:', fact);
+          continue;
+        }
+
+        const memoryFact: MemoryFact = {
+          id: uuidv4(),
+          type: fact.type,
+          key: fact.key,
+          value: fact.value,
+          timestamp: new Date().toISOString(),
+          originMessage: turn.userMessage,
+          userId: turn.userId,
+        };
+
+        // Generate embedding for the fact
+        const embedding = await generateEmbedding(factText);
+        
+        // Store in Qdrant
+        await storeMemoryFact(memoryFact, embedding);
+        memoryFacts.push(memoryFact);
       }
 
       console.log(`💾 Extracted and stored ${memoryFacts.length} facts`);
@@ -275,6 +367,68 @@ export class AthenaMemoryManager {
     } catch (error) {
       console.error('❌ Failed to build memory context:', error);
       return '';
+    }
+  }
+
+  /**
+   * Test buffer overflow handling
+   */
+  async testBufferOverflow(messages: Array<{ userMessage: string; assistantResponse: string; userId: string }>): Promise<any> {
+    const results = [];
+    
+    for (const message of messages) {
+      try {
+        const facts = await this.extractAndStoreFacts(message);
+        results.push({
+          success: true,
+          factsExtracted: facts.length,
+          message: message.userMessage.substring(0, 50) + '...'
+        });
+      } catch (error) {
+        results.push({
+          success: false,
+          error: error instanceof Error ? error.message : 'Unknown error',
+          message: message.userMessage.substring(0, 50) + '...'
+        });
+      }
+    }
+    
+    return {
+      totalProcessed: messages.length,
+      successful: results.filter(r => r.success).length,
+      failed: results.filter(r => !r.success).length,
+      results: results.slice(-10) // Keep last 10 for debugging
+    };
+  }
+
+  /**
+   * Test memory pruning functionality
+   */
+  async testMemoryPruning(userId: string): Promise<any> {
+    try {
+      // Get all facts before pruning
+      const allFactsBefore = await getAllMemoryFacts(userId);
+      
+      // Simulate pruning (this would normally be based on age, relevance, etc.)
+      const cutoffDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000); // 7 days ago
+      const factsToKeep = allFactsBefore.filter(fact => 
+        new Date(fact.timestamp) > cutoffDate
+      );
+      
+      return {
+        totalFactsBefore: allFactsBefore.length,
+        factsAfterPruning: factsToKeep.length,
+        prunedCount: allFactsBefore.length - factsToKeep.length,
+        pruningCriteria: 'Facts older than 7 days',
+        oldestFact: allFactsBefore.length > 0 ? 
+          new Date(Math.min(...allFactsBefore.map(f => new Date(f.timestamp).getTime()))).toISOString() : 
+          null,
+        newestFact: allFactsBefore.length > 0 ? 
+          new Date(Math.max(...allFactsBefore.map(f => new Date(f.timestamp).getTime()))).toISOString() : 
+          null
+      };
+    } catch (error) {
+      throw new Error(`Memory pruning test failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 }

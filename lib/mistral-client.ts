@@ -167,4 +167,35 @@ export async function validateMistralSetup(): Promise<boolean> {
   }
 }
 
+/**
+ * Test Mistral API connection with detailed results
+ */
+export async function testMistralConnection(): Promise<{ success: boolean; details: any }> {
+  try {
+    const startTime = Date.now();
+    const testResponse = await simpleCompletion('Test connection', { maxTokens: 10 });
+    const endTime = Date.now();
+    
+    return {
+      success: true,
+      details: {
+        responseTime: endTime - startTime,
+        responseLength: testResponse.length,
+        model: DEFAULT_MODEL,
+        apiKeyPresent: !!MISTRAL_API_KEY,
+        response: testResponse.substring(0, 50) + (testResponse.length > 50 ? '...' : '')
+      }
+    };
+  } catch (error) {
+    return {
+      success: false,
+      details: {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        model: DEFAULT_MODEL,
+        apiKeyPresent: !!MISTRAL_API_KEY,
+      }
+    };
+  }
+}
+
 export { mistralClient };

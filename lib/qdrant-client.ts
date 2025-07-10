@@ -269,4 +269,40 @@ export async function validateQdrantSetup(): Promise<boolean> {
   }
 }
 
+/**
+ * Test Qdrant connection with detailed results
+ */
+export async function testQdrantConnection(): Promise<{ success: boolean; details: any }> {
+  try {
+    const startTime = Date.now();
+    const collections = await qdrantClient.getCollections();
+    const endTime = Date.now();
+    
+    // Check if our collection exists
+    const collectionExists = collections.collections.some(
+      (collection: any) => collection.name === COLLECTION_NAME
+    );
+    
+    return {
+      success: true,
+      details: {
+        responseTime: endTime - startTime,
+        totalCollections: collections.collections.length,
+        athenaCollectionExists: collectionExists,
+        url: process.env.QDRANT_URL,
+        apiKeyPresent: !!process.env.QDRANT_API_KEY,
+      }
+    };
+  } catch (error) {
+    return {
+      success: false,
+      details: {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        url: process.env.QDRANT_URL,
+        apiKeyPresent: !!process.env.QDRANT_API_KEY,
+      }
+    };
+  }
+}
+
 export { qdrantClient, COLLECTION_NAME };

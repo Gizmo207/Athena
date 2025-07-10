@@ -102,7 +102,7 @@ export const AGENT_ROUTING_MAP = {
   'strategy|planning|market|competitive|business|roadmap|vision': 'STRATEGIST',
   'finance|budget|cost|revenue|financial|accounting|profit|loss': 'FINANCE',
   'security|breach|risk|compliance|vulnerability|threat|encryption': 'SECURITY',
-  'communication|messaging|stakeholder|meeting|presentation|email': 'COMMUNICATIONS',
+  'communication|messaging|stakeholder|meeting|presentation|email|update|notify': 'COMMUNICATIONS',
   'project|task|management|workflow|timeline|deadline|milestone': 'PROJECT-MANAGER',
   'health|wellness|stress|work-life|mental|physical|exercise': 'WELLNESS',
   'research|investigation|analysis|study|exploration|discovery': 'RESEARCH',
