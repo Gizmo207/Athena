@@ -92,6 +92,9 @@ export default async function handler(
   }
 
   console.log('🚀 Athena Mistral API called');
+  console.log('=== API ENTRY DEBUG ===');
+  console.log('Memory manager exists:', !!memoryManager);
+  console.log('Search method exists:', !!memoryManager.getMemoryContext);
 
   try {
     const { message, shortTermBuffer = [], userId = 'user', memoryOnly = false }: ApiRequest = req.body;
@@ -127,7 +130,7 @@ export default async function handler(
 
     // Step 1: Retrieve memory context
     console.log('🧠 Step 1: Retrieving memory context...');
-    const memoryContext = await memoryManager.buildMemoryContext(message, userId);
+    const memoryContext = await memoryManager.buildMemoryContext(message, userId, shortTermBuffer);
     
     // Step 2: Agent routing analysis
     console.log('🎯 Step 2: Analyzing agent routing...');

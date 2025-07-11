@@ -15,7 +15,7 @@ async function runBasicTests() {
     console.log('\nTest 2: Adding messages to session...');
     const userMessage = {
       id: MessageProcessor.generateMessageId(),
-      role: 'user' as const,
+      role: 'user',
       content: 'Hello, this is a test message',
       timestamp: new Date().toISOString()
     };

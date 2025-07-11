@@ -202,21 +202,26 @@ export class AthenaMemoryManager {
           continue;
         }
 
+        // Normalize key and value for case-insensitive search while preserving originals
+        const normalizedKey = fact.key.toLowerCase();
+        const normalizedValue = fact.value.toLowerCase();
+
         const memoryFact: MemoryFact = {
           id: uuidv4(),
           type: fact.type,
-          key: fact.key,
-          value: fact.value,
+          key: normalizedKey,
+          value: normalizedValue,
           timestamp: new Date().toISOString(),
           originMessage: turn.userMessage,
           userId: turn.userId,
         };
 
-        // Generate embedding for the fact
-        const embedding = await generateEmbedding(factText);
+        // Generate embedding using normalized text for consistent case-insensitive search
+        const normalizedFactText = `${normalizedKey}: ${normalizedValue}`;
+        const embedding = await generateEmbedding(normalizedFactText);
         
-        // Store in Qdrant
-        await storeMemoryFact(memoryFact, embedding);
+        // Store in Qdrant with original text for context
+        await storeMemoryFact(memoryFact, embedding, fact.key, fact.value);
         memoryFacts.push(memoryFact);
       }
 
@@ -234,12 +239,23 @@ export class AthenaMemoryManager {
   async getMemoryContext(query: string, userId: string, limit: number = 10): Promise<MemoryContext> {
     try {
       console.log(`🔍 Retrieving memory context for: "${query}"`);
+      console.log('=== MEMORY CONTEXT ENTRY ===');
+      console.log('Query received:', query);
+      console.log('UserId:', userId);
+      console.log('Limit:', limit);
       
-      // Generate embedding for the query
-      const queryEmbedding = await generateEmbedding(query);
+      // Normalize query for case-insensitive search
+      const normalizedQuery = query.toLowerCase();
+      console.log('Normalized query:', normalizedQuery);
+      
+      // Generate embedding for the normalized query
+      console.log('🔄 Generating embedding...');
+      const queryEmbedding = await generateEmbedding(normalizedQuery);
+      console.log('✅ Embedding generated, calling searchMemoryFacts...');
       
       // Search for relevant facts
       const searchResults = await searchMemoryFacts(queryEmbedding, userId, limit);
+      console.log('✅ Search completed, results count:', searchResults.length);
       
       if (searchResults.length === 0) {
         console.log('ℹ️ No relevant memory context found');
@@ -317,32 +333,49 @@ export class AthenaMemoryManager {
   /**
    * Build comprehensive memory context from search query
    */
-  async buildMemoryContext(query: string, userId: string): Promise<string> {
-    try {        // For empty queries (session restore), just get recent general context
-        if (!query || query.trim() === '') {
-          console.log('🔍 Retrieving general memory context for session restore...');
-          try {
-            const recentFacts = await this.getRecentMemoryFacts(userId, 10);
-            
-            if (recentFacts.length === 0) {
-              console.log('ℹ️ No memory facts found for session restore');
-              return '';
-            }
-
-            // Format recent facts
-            const contextParts: string[] = [];
-            recentFacts.forEach((fact: MemoryFact) => {
-              contextParts.push(`• ${fact.key}: ${fact.value} (${fact.type})`);
-            });
-
-            return `RECENT MEMORY CONTEXT:\n${contextParts.join('\n')}`;
-          } catch (error) {
-            console.warn('⚠️ Could not retrieve memory facts for session restore:', error);
+  async buildMemoryContext(query: string, userId: string, shortTermBuffer?: any[]): Promise<string> {
+    try {
+      // Combine short-term buffer and query for enhanced context
+      let combinedContext = query;
+      
+      if (shortTermBuffer && shortTermBuffer.length > 0) {
+        const stmText = shortTermBuffer
+          .map(msg => `${msg.role}: ${msg.content}`)
+          .join(' ');
+        combinedContext = [...shortTermBuffer.map(msg => msg.content), query]
+          .join(' ')
+          .toLowerCase();
+        console.log('Combined context:', combinedContext);
+      }
+      
+      // For empty queries (session restore), just get recent general context
+      if (!query || query.trim() === '') {
+        console.log('🔍 Retrieving general memory context for session restore...');
+        console.log('=== EMPTY QUERY PATH - SESSION RESTORE ===');
+        try {
+          const recentFacts = await this.getRecentMemoryFacts(userId, 10);
+          
+          if (recentFacts.length === 0) {
+            console.log('ℹ️ No memory facts found for session restore');
             return '';
           }
-        }
 
-      const context = await this.getMemoryContext(query, userId, 15);
+          // Format recent facts
+          const contextParts: string[] = [];
+          recentFacts.forEach((fact: MemoryFact) => {
+            contextParts.push(`• ${fact.key}: ${fact.value} (${fact.type})`);
+          });
+
+          return `RECENT MEMORY CONTEXT:\n${contextParts.join('\n')}`;
+        } catch (error) {
+          console.warn('⚠️ Could not retrieve memory facts for session restore:', error);
+          return '';
+        }
+      }
+
+      console.log('=== NORMAL QUERY PATH - SEMANTIC SEARCH ===');
+      console.log('About to call getMemoryContext with:', combinedContext);
+      const context = await this.getMemoryContext(combinedContext, userId, 15);
       
       if (context.facts.length === 0) {
         return '';

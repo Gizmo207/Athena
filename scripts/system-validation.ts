@@ -29,18 +29,18 @@ async function runSystemValidation() {
     const embeddingTest = await testEmbeddingConnection();
     
     results.total += 3;
-    results.passed += mistralTest.success ? 1 : 0;
-    results.passed += qdrantTest.success ? 1 : 0;
-    results.passed += embeddingTest.success ? 1 : 0;
-    results.failed += mistralTest.success ? 0 : 1;
-    results.failed += qdrantTest.success ? 0 : 1;
-    results.failed += embeddingTest.success ? 0 : 1;
+    results.passed += mistralTest ? 1 : 0;
+    results.passed += qdrantTest ? 1 : 0;
+    results.passed += embeddingTest ? 1 : 0;
+    results.failed += mistralTest ? 0 : 1;
+    results.failed += qdrantTest ? 0 : 1;
+    results.failed += embeddingTest ? 0 : 1;
     
     results.details.push({
       test: 'API Connections',
-      mistral: mistralTest,
-      qdrant: qdrantTest,
-      embedding: embeddingTest
+      mistral: { success: mistralTest },
+      qdrant: { success: qdrantTest },
+      embedding: { success: embeddingTest }
     });
   } catch (error) {
     results.total += 3;

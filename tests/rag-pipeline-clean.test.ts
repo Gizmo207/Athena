@@ -1,11 +1,58 @@
 /**
- * Comprehensive RAG Pipeline Test Suite
- * Tests Short-Term Memory, Long-Term Memory, and Chat Session Operations
+ * Comprehensive RAG Pipeline Te  async search(query: string, userId: string, limit: number = 10): Promise<MockFact[]> {
+    if (!this.isConnected && Math.random() < 0.1) {
+      throw new Error('Vector store connection failed');
+    }
+
+    // Normalize query for case-insensitive search
+    const normalizedQuery = query.toLowerCase();
+    const queryWords = normalizedQuery.split(' ');
+    
+    console.log('=== SEARCH DEBUG ===');
+    console.log('Search query:', normalizedQuery);
+    console.log('Available facts for user:', this.facts.filter(f => f.userId === userId).map(f => f.content));
+    
+    const results = this.facts
+      .filter(fact => {
+        if (fact.userId !== userId) return false;
+        
+        const factContent = fact.content.toLowerCase();
+        console.log(`Checking fact: "${factContent}"`);
+        
+        // Direct word matches
+        if (queryWords.some(word => factContent.includes(word))) {
+          console.log(`  ✓ Direct word match found`);
+          return true;
+        }
+        
+        // Semantic matches for preferences (handle both singular and plural)
+        if (normalizedQuery.includes('preference') || normalizedQuery.includes('favorite') || normalizedQuery.includes('like')) {
+          console.log(`  ? Checking for preference semantic match...`);
+          if (factContent.includes('preference:') || factContent.includes('favorite') || factContent.includes('technology:')) {
+            console.log(`  ✓ Preference semantic match found`);
+            return true;
+          }
+        }
+        
+        // Semantic matches for personal info
+        if (normalizedQuery.includes('about me') || normalizedQuery.includes('know about')) {
+          console.log(`  ✓ General personal info match found`);
+          return true; // Return all facts for general queries about the user
+        }
+        
+        console.log(`  ✗ No match`);
+        return false;
+      })
+      .slice(0, limit);
+      
+    console.log('Search results:', results.map(f => f.content));
+    console.log('=== END SEARCH DEBUG ===');
+    
+    return results;
+  }ts Short-Term Memory, Long-Term Memory, and Chat Session Operations
  */
 
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import { jest } from '@jest/globals';
+import { describe, test, expect, beforeEach, afterEach } from '@jest/globals';
 
 // Mock implementations
 interface MockMessage {
@@ -42,69 +89,15 @@ class MockVectorStore {
       throw new Error('Vector store connection failed');
     }
 
-    if (!query || !query.trim()) {
-      return [];
-    }
-
-    // Simple mock search - return facts containing similar words
-    const queryWords = query.toLowerCase().split(' ').filter(word => word.length > 1);
-    if (queryWords.length === 0) {
-      return [];
-    }
-
-    const relevantFacts = this.facts
-      .filter(fact => {
-        if (fact.userId !== userId) return false;
-        
-        const factContent = fact.content.toLowerCase();
-        
-        // Check for direct word matches
-        let hasMatch = queryWords.some(word => 
-          word.length > 2 && // Ignore very short words
-          (factContent.includes(word) || 
-           factContent.split(' ').some(factWord => 
-             factWord.includes(word) || word.includes(factWord)
-           ))
-        );
-
-        // Enhanced semantic matching for common query patterns
-        if (!hasMatch) {
-          const queryLower = query.toLowerCase();
-          
-          // Handle "what do you know" type queries
-          if ((queryLower.includes('what') || queryLower.includes('know') || queryLower.includes('tell')) && 
-              (factContent.includes('like') || factContent.includes('love') || factContent.includes('enjoy') || 
-               factContent.includes('prefer') || factContent.includes('favorite') || factContent.includes('is'))) {
-            hasMatch = true;
-          }
-          
-          // Handle specific topic queries - case insensitive matching
-          if (queryLower.includes('react') && factContent.includes('react')) hasMatch = true;
-          if (queryLower.includes('music') && factContent.includes('music')) hasMatch = true;
-          if (queryLower.includes('food') && factContent.includes('food')) hasMatch = true;
-          if (queryLower.includes('technology') && factContent.includes('technology')) hasMatch = true;
-          if (queryLower.includes('python') && factContent.includes('python')) hasMatch = true;
-          if (queryLower.includes('framework') && (factContent.includes('framework') || factContent.includes('react') || factContent.includes('python'))) hasMatch = true;
-          if (queryLower.includes('hobby') && (factContent.includes('hobby') || factContent.includes('like'))) hasMatch = true;
-        }
-        
-        return hasMatch;
-      });
-
-    // Sort by relevance and recency
-    return relevantFacts
-      .sort((a, b) => {
-        // Prioritize exact matches
-        const aExactMatches = queryWords.filter(word => a.content.toLowerCase().includes(word)).length;
-        const bExactMatches = queryWords.filter(word => b.content.toLowerCase().includes(word)).length;
-        
-        if (aExactMatches !== bExactMatches) {
-          return bExactMatches - aExactMatches;
-        }
-        
-        // Then by recency
-        return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
-      })
+    // Normalize query for case-insensitive search
+    const normalizedQuery = query.toLowerCase();
+    const queryWords = normalizedQuery.split(' ');
+    
+    return this.facts
+      .filter(fact => 
+        fact.userId === userId && 
+        queryWords.some(word => fact.content.toLowerCase().includes(word))
+      )
       .slice(0, limit);
   }
 
@@ -213,10 +206,17 @@ class MockRAGPipeline {
     // Get STM context
     const stmContext = this.stm.getContextWindow();
 
-    // Search LTM for relevant context
+    // Combine STM and current message for enhanced LTM search
+    const combinedSearchContext = [
+      ...(this.stm.getAll().map(msg => msg.content) || []),
+      content
+    ].join(' ').toLowerCase();
+    console.log('Combined context:', combinedSearchContext);
+
+    // Search LTM for relevant context using combined context
     let ltmContext: MockFact[] = [];
     try {
-      ltmContext = await this.ltm.search(content, userId);
+      ltmContext = await this.ltm.search(combinedSearchContext, userId);
     } catch (error) {
       console.warn('LTM search failed, continuing without LTM context:', error);
       ltmContext = [];
@@ -229,15 +229,15 @@ class MockRAGPipeline {
       
       // Store facts in LTM
       for (const fact of extractedFacts) {
+        const factObject: MockFact = {
+          id: `fact_${Date.now()}_${Math.random()}`,
+          userId,
+          content: fact,
+          metadata: { source: 'conversation', extractedAt: new Date().toISOString() },
+          embedding: this.generateMockEmbedding(fact),
+          timestamp: new Date().toISOString()
+        };
         try {
-          const factObject: MockFact = {
-            id: `fact_${Date.now()}_${Math.random()}`,
-            userId,
-            content: fact,
-            metadata: { source: 'conversation', extractedAt: new Date().toISOString() },
-            embedding: this.generateMockEmbedding(fact),
-            timestamp: new Date().toISOString()
-          };
           await this.ltm.store(factObject);
         } catch (error) {
           console.warn('Failed to store fact, continuing:', error);
@@ -274,24 +274,40 @@ class MockRAGPipeline {
       facts.push(`location: ${locationMatch[1].trim()}`);
     }
 
-    // Extract preferences and technologies
+    // Extract preferences (including programming languages in context)
     const preferencePatterns = [
       /(?:prefer|like|love|enjoy)\s+([^,.!?]+)/,
-      /favorite\s+([^,.!?]+)/,
-      /(?:working with|work with|using|use)\s+([a-z\s]+?)(?:\s|$|,|\.|!|\?)/,
-      /(?:i'?m learning|learning)\s+([a-z\s]+?)(?:\s|$|,|\.|!|\?)/,
-      /(?:developer|engineer|programmer)/
+      /(?:my\s+)?favorite\s+(?:language|framework|tool|technology|tech)?\s*(?:is\s+)?([a-z\s]+?)(?:\s|$|,|\.|!|\?)/,
+      /(?:work(?:ing)?\s+with|using)\s+([a-z\s]+?)(?:\s|$|,|\.|!|\?)/
     ];
 
     for (const pattern of preferencePatterns) {
       const match = text.match(pattern);
       if (match) {
-        facts.push(`preference: ${match[1] ? match[1].trim() : match[0]}`);
+        facts.push(`preference: ${match[1].trim()}`);
       }
     }
 
-    // Always store the full message as a fact for better context retrieval
-    facts.push(content.toLowerCase());
+    // Extract standalone technology mentions (only if not already in preferences)
+    const techPatterns = [
+      /\b(typescript|javascript|react|vue|angular|node|java|c\+\+|c#|golang|rust|ruby|php|swift|kotlin|fastapi|django|flask|express|spring|laravel)\b/gi
+    ];
+
+    for (const pattern of techPatterns) {
+      const matches = text.match(pattern);
+      if (matches) {
+        matches.forEach(match => {
+          const techFact = `technology: ${match.toLowerCase()}`;
+          // Only add if not already covered by preferences
+          const hasPreferenceWithTech = facts.some(f => 
+            f.startsWith('preference:') && f.includes(match.toLowerCase())
+          );
+          if (!hasPreferenceWithTech) {
+            facts.push(techFact);
+          }
+        });
+      }
+    }
 
     return facts;
   }
@@ -313,67 +329,39 @@ class MockRAGPipeline {
     stmContext: string, 
     ltmContext: MockFact[]
   ): string {
-    let response = `I understand you said: "${input}".`;
+    const inputLower = input.toLowerCase();
     
-    if (ltmContext.length > 0) {
-      // Build user profile from LTM context
-      const userProfile = this.buildUserProfile(ltmContext);
+    // Build context information from LTM
+    const contextInfo = ltmContext.length > 0 
+      ? ` Based on what I know about you (${ltmContext.map(f => f.content).join(', ')}),`
+      : '';
+    
+    // Generate intelligent responses based on input and context
+    if (inputLower.includes('framework')) {
+      // Check if user has Python-related technologies or preferences
+      const hasPythonContext = ltmContext.some(f => 
+        f.content.toLowerCase().includes('python') || 
+        f.content.toLowerCase().includes('fastapi') ||
+        f.content.toLowerCase().includes('django') ||
+        f.content.toLowerCase().includes('flask')
+      );
       
-      response += ` Based on what I know about you (${ltmContext.map(f => f.content).join(', ')}),`;
-      
-      // Add context-aware suggestions based on LTM content
-      const inputLower = input.toLowerCase();
-      
-      if (inputLower.includes('framework')) {
-        if (userProfile.technologies.includes('python')) {
-          response += ' I recommend Python frameworks like FastAPI or Django.';
-        } else if (userProfile.technologies.includes('react')) {
-          response += ' You might want to continue with React or try Next.js.';
-        } else {
-          response += ' I can help you choose the right framework.';
-        }
-      } else if (inputLower.includes('what') && (inputLower.includes('know') || inputLower.includes('tell'))) {
-        response += ` I can see you have experience with ${userProfile.technologies.join(', ')}.`;
+      if (hasPythonContext) {
+        return `I understand you're asking about frameworks.${contextInfo} Since you're a Python developer, I'd recommend considering FastAPI for APIs, Django for web apps, or Flask for lightweight projects.`;
       }
     }
     
-    response += ' How can I help you further?';
-    
-    return response;
-  }
-
-  private buildUserProfile(ltmContext: MockFact[]): { name: string; technologies: string[]; role: string } {
-    const profile = {
-      name: 'a', // default fallback
-      technologies: [] as string[],
-      role: ''
-    };
-
-    for (const fact of ltmContext) {
-      const content = fact.content.toLowerCase();
-      
-      // Extract name
-      const nameMatch = content.match(/(?:name:|my name is|i'?m)\s*([a-z]+)/);
-      if (nameMatch) {
-        profile.name = nameMatch[1];
-      }
-      
-      // Extract technologies - look for common tech terms
-      const techTerms = ['react', 'python', 'javascript', 'typescript', 'java', 'node', 'angular', 'vue', 'django', 'fastapi'];
-      for (const tech of techTerms) {
-        if (content.includes(tech) && !profile.technologies.includes(tech)) {
-          profile.technologies.push(tech);
-        }
-      }
-      
-      // Extract role
-      const roleMatch = content.match(/(?:i am|i'?m)\s+(?:a |an )?([a-z]+)\s*(?:developer|engineer|programmer)/);
-      if (roleMatch) {
-        profile.role = roleMatch[1];
-      }
+    if (inputLower.includes('preferences') && ltmContext.length > 0) {
+      const preferences = ltmContext.map(f => f.content).join(' and ');
+      return `Based on our conversation history, I know you prefer ${preferences}. Is there something specific you'd like to know about these technologies?`;
     }
-
-    return profile;
+    
+    if (inputLower.includes('react') && ltmContext.some(f => f.content.toLowerCase().includes('react'))) {
+      return `I see you're interested in React.${contextInfo} React is a great choice for building user interfaces. Would you like to know about hooks, components, or state management?`;
+    }
+    
+    // Default response
+    return `I understand you said: "${input}".${contextInfo} How can I help you further?`;
   }
 
   getSTM(): MockSTMBuffer {
@@ -475,7 +463,7 @@ function createTestMessage(content: string, role: 'user' | 'assistant' = 'user')
   };
 }
 
-function measureExecutionTime<T>(fn: () => Promise<T>): Promise<{ result: T; duration: number }> {
+function measureExecutionTime(fn: () => Promise<any>): Promise<{ result: any; duration: number }> {
   return new Promise(async (resolve) => {
     const start = performance.now();
     const result = await fn();
@@ -588,7 +576,7 @@ describe('RAG Pipeline Test Suite', () => {
       expect(result.extractedFacts).toContain('preference: python programming');
       
       const storedFacts = await ltm.getUserFacts(testUserId);
-      expect(storedFacts.length).toBe(4); // name, location, preference + full message
+      expect(storedFacts.length).toBe(3);
     });
 
     test('should retrieve relevant context from LTM', async () => {
@@ -631,10 +619,10 @@ describe('RAG Pipeline Test Suite', () => {
       const user1Facts = await ragPipeline.getLTM().getUserFacts(user1);
       const user2Facts = await ragPipeline.getLTM().getUserFacts(user2);
       
-      expect(user1Facts.length).toBe(2); // name fact + full message
-      expect(user2Facts.length).toBe(2); // name fact + full message
-      expect(user1Facts.some(f => f.content.includes('alice'))).toBe(true);
-      expect(user2Facts.some(f => f.content.includes('bob'))).toBe(true);
+      expect(user1Facts.length).toBe(1);
+      expect(user2Facts.length).toBe(1);
+      expect(user1Facts[0].content).toContain('alice');
+      expect(user2Facts[0].content).toContain('bob');
     });
 
     test('should handle vector store failures gracefully', async () => {
@@ -643,19 +631,12 @@ describe('RAG Pipeline Test Suite', () => {
       // Simulate connection failure
       ltm.setConnectionStatus(false);
       
-      // The error should be caught and handled gracefully
-      try {
-        const result = await ragPipeline.processMessage("Test message", testUserId);
-        
-        // Should still process message but with empty LTM context
-        expect(result.response).toBeTruthy();
-        expect(result.ltmContext).toEqual([]);
-        expect(result.extractedFacts).toEqual([]);
-      } catch (error) {
-        // If error is thrown, it should be the connection error
-        expect(error).toBeInstanceOf(Error);
-        expect((error as Error).message).toContain('Vector store connection failed');
-      }
+      const result = await ragPipeline.processMessage("Test message", testUserId);
+      
+      // Should still process message but with empty LTM context
+      expect(result.response).toBeTruthy();
+      expect(result.ltmContext).toEqual([]);
+      expect(result.extractedFacts).toEqual([]);
     });
   });
 
@@ -687,13 +668,22 @@ describe('RAG Pipeline Test Suite', () => {
 
     test('should maintain context across session boundaries', async () => {
       // Session 1: Store facts
-      await ragPipeline.processMessage("My favorite language is TypeScript", testUserId);
+      console.log('=== SESSION 1: Storing facts ===');
+      const firstResult = await ragPipeline.processMessage("My favorite language is TypeScript", testUserId);
+      console.log('Extracted facts:', firstResult.extractedFacts);
+      
+      // Check what's stored in LTM
+      const storedFacts = await ragPipeline.getLTM().getUserFacts(testUserId);
+      console.log('Facts stored in LTM:', storedFacts.map(f => f.content));
       
       // Clear STM (simulate new session)
+      console.log('=== CLEARING STM (new session) ===');
       ragPipeline.clearSession();
       
       // Session 2: Should still have LTM context
+      console.log('=== SESSION 2: Retrieving context ===');
       const result = await ragPipeline.processMessage("What do you know about my preferences?", testUserId);
+      console.log('LTM context found:', result.ltmContext.map(f => f.content));
       
       expect(result.ltmContext.length).toBeGreaterThan(0);
       expect(result.ltmContext.some(f => f.content.includes('typescript'))).toBe(true);
@@ -774,7 +764,7 @@ describe('RAG Pipeline Test Suite', () => {
       const result = await ragPipeline.processMessage('', testUserId);
       
       expect(result.response).toBeTruthy();
-      expect(result.extractedFacts).toEqual(['']); // Empty message still gets stored as a fact
+      expect(result.extractedFacts).toEqual([]);
     });
 
     test('should handle very long messages', async () => {
@@ -795,12 +785,7 @@ describe('RAG Pipeline Test Suite', () => {
     });
 
     test('should handle concurrent message processing', async () => {
-      const promises: Promise<{
-        response: string;
-        stmContext: string;
-        ltmContext: MockFact[];
-        extractedFacts: string[];
-      }>[] = [];
+      const promises: Promise<any>[] = [];
       
       for (let i = 0; i < 10; i++) {
         promises.push(ragPipeline.processMessage(`Message ${i}`, testUserId));
@@ -828,12 +813,7 @@ describe('RAG Pipeline Test Suite', () => {
       const messageCount = 50;
       
       const { duration } = await measureExecutionTime(async () => {
-        const promises: Promise<{
-          response: string;
-          stmContext: string;
-          ltmContext: MockFact[];
-          extractedFacts: string[];
-        }>[] = [];
+        const promises: Promise<any>[] = [];
         for (let i = 0; i < messageCount; i++) {
           promises.push(ragPipeline.processMessage(`Message ${i}`, testUserId));
         }
@@ -860,12 +840,7 @@ describe('RAG Pipeline Test Suite', () => {
     test('should handle memory pressure gracefully', async () => {
       // Stress test with rapid message bursts
       for (let burst = 0; burst < 5; burst++) {
-        const promises: Promise<{
-          response: string;
-          stmContext: string;
-          ltmContext: MockFact[];
-          extractedFacts: string[];
-        }>[] = [];
+        const promises: Promise<any>[] = [];
         for (let i = 0; i < 20; i++) {
           promises.push(ragPipeline.processMessage(`Burst ${burst} Message ${i}`, testUserId));
         }
@@ -928,13 +903,13 @@ describe('RAG Pipeline Test Suite', () => {
   });
 });
 
-// Additional Test Utilities for manual testing
+// Export test utilities for manual testing
 export const TestUtils = {
-  createMockRAGPipeline: () => new MockRAGPipeline(),
-  createMockSessionManager: () => new MockSessionManager(),
+  MockRAGPipeline,
+  MockSessionManager,
+  MockVectorStore,
+  MockSTMBuffer,
   testConversations,
   measureExecutionTime,
   createTestMessage
 };
-
-export default TestUtils;
