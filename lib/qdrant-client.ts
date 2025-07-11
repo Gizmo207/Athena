@@ -62,13 +62,30 @@ export async function initializeQdrantCollection(): Promise<void> {
   try {
     console.log('🔄 Initializing Qdrant collection...');
     
-    // Force delete and recreate collection to ensure correct vector size (1024 for Mistral)
+    // Check if collection exists first
     try {
-      console.log(`🗑️ Deleting existing collection: ${COLLECTION_NAME}`);
-      await withRetry(() => qdrantClient.deleteCollection(COLLECTION_NAME));
-      console.log('✅ Old collection deleted');
+      const collections = await withRetry(() => qdrantClient.getCollections());
+      const collectionExists = collections.collections.some(c => c.name === COLLECTION_NAME);
+      
+      if (collectionExists) {
+        // Verify collection configuration
+        const collectionInfo = await withRetry(() => qdrantClient.getCollection(COLLECTION_NAME));
+        const currentVectorSize = collectionInfo.config?.params?.vectors?.size;
+        
+        if (currentVectorSize === VECTOR_SIZE) {
+          console.log(`✅ Collection already exists with correct vector size (${VECTOR_SIZE})`);
+          return;
+        } else {
+          console.log(`⚠️ Collection vector size mismatch: expected ${VECTOR_SIZE}, got ${currentVectorSize}`);
+          console.log(`🗑️ Deleting collection with wrong vector size`);
+          await withRetry(() => qdrantClient.deleteCollection(COLLECTION_NAME));
+          console.log('✅ Old collection deleted');
+        }
+      } else {
+        console.log('ℹ️ No existing collection found');
+      }
     } catch (error) {
-      console.log('ℹ️ No existing collection to delete');
+      console.log('ℹ️ Collection check failed, proceeding with creation');
     }
     
     // Create fresh collection with correct 1024-dimensional vectors for Mistral

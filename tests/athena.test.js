@@ -72,8 +72,9 @@ describe('Athena Memory & RAG Pipeline', () => {
     
     console.log('Memory context retrieved:', res.body.memoryContext);
     
-    // Check if our fact appears in the memory context
-    expect(res.body.memoryContext).toMatch(/Harley|motorcycle/i);
+    // Check if our fact appears in the memory context (should have facts array and contextText)
+    expect(res.body.memoryContext.facts.length).toBeGreaterThanOrEqual(1);
+    expect(res.body.memoryContext.contextText).toMatch(/Harley|motorcycle/i);
     
     console.log('✅ Memory context test completed');
   });
