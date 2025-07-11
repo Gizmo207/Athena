@@ -4,7 +4,7 @@ import {
   searchMemoryFacts, 
   getAllMemoryFacts,
   initializeQdrantCollection,
-  MemoryFact
+  type MemoryFact
 } from './qdrant-client';
 import { generateEmbedding } from './embedding-client';
 import { CONFIG } from './config';
