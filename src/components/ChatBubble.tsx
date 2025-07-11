@@ -1,15 +1,26 @@
 'use client'
 import { ReactNode } from 'react';
+import { TypewriterEffect } from './TypewriterEffect';
 
 interface ChatBubbleProps {
   message: string;
-  sender: 'user' | 'agent';
+  sender: 'user' | 'agent' | 'system';
   agentName?: string;
   children?: ReactNode;
+  useTypewriter?: boolean;
+  typewriterSpeed?: number;
 }
 
-export default function ChatBubble({ message, sender, agentName = 'ATHENA', children }: ChatBubbleProps) {
+export default function ChatBubble({ 
+  message, 
+  sender, 
+  agentName = 'ATHENA', 
+  children, 
+  useTypewriter = false,
+  typewriterSpeed = 30 
+}: ChatBubbleProps) {
   const isUser = sender === 'user';
+  const isSystem = sender === 'system';
   
   return (
     <div
@@ -59,7 +70,16 @@ export default function ChatBubble({ message, sender, agentName = 'ATHENA', chil
           <div className={`text-lg leading-relaxed ${
             isUser ? 'text-cyan-100' : 'text-gray-100'
           }`} style={{ fontSize: '1.05rem', lineHeight: 1.6 }}>
-            {message}
+            {useTypewriter && !isUser ? (
+              <TypewriterEffect
+                content={message}
+                speed={typewriterSpeed}
+                autoScroll={true}
+                className="whitespace-pre-line"
+              />
+            ) : (
+              message
+            )}
           </div>
           {children}
         </div>

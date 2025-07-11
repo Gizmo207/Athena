@@ -7,6 +7,9 @@ import AgentSwitcher, { Agent, AVAILABLE_AGENTS } from "@/components/AgentSwitch
 import SessionSidebar from "@/components/SessionSidebar";
 import ChatBubble from "@/components/ChatBubble";
 import { restoreAthenaMemoryContext } from "@/hooks/sessionRestore";
+import { SessionManager } from "@/lib/sessionManager";
+import { MessageProcessor } from "@/lib/messageProcessor";
+import { Message, Session, SessionStore } from "@/types/chat";
 
 // Main Home Page — Modular, TypeScript, Airbnb+Prettier
 export default function Home() {
@@ -16,8 +19,9 @@ export default function Home() {
       message:
         "Greetings, Commander. I'm ATHENA, your Intelligent Overseer Agent. I'm here to help you coordinate complex projects, manage tasks, and provide strategic insights. My memory systems are online and I'm ready to assist with whatever challenges you're facing. What's our first objective?",
       sender: "agent",
+      useTypewriter: false, // Initial message doesn't need typewriter
     },
-  ] as Array<{ id: number; message: string; sender: "user" | "agent" | "system" }>);
+  ] as Array<{ id: number; message: string; sender: "user" | "agent" | "system"; useTypewriter?: boolean }>);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [booted, setBooted] = useState(false);
@@ -26,6 +30,10 @@ export default function Home() {
   const [sessionId, setSessionId] = useState(() => `session_${Date.now()}`); // Current session ID
   const [showGreeting, setShowGreeting] = useState(true); // Control greeting display
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false); // Sidebar collapse state
+  
+  // Enhanced session management
+  const [sessionStore, setSessionStore] = useState<SessionStore | null>(null);
+  const [currentSession, setCurrentSession] = useState<Session | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageId = useRef(2);
@@ -34,9 +42,60 @@ export default function Home() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
+  // Initialize enhanced session management
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    const initializeSessionManagement = async () => {
+      try {
+        const store = await SessionManager.loadSessions();
+        setSessionStore(store);
+        
+        // If there's a current session, load it
+        if (store.currentSessionId && store.sessions[store.currentSessionId]) {
+          const session = store.sessions[store.currentSessionId];
+          setCurrentSession(session);
+          
+          // Convert enhanced session to legacy format for existing UI
+          const legacyMessages = session.messages.map((msg, index) => ({
+            id: index + 1,
+            message: msg.content,
+            sender: msg.role === 'user' ? 'user' as const : 
+                   msg.role === 'assistant' ? 'agent' as const : 'system' as const
+          }));
+          
+          if (legacyMessages.length > 0) {
+            setMessages(legacyMessages);
+            setShowGreeting(false);
+            messageId.current = legacyMessages.length + 1;
+          }
+        }
+      } catch (error) {
+        console.error('Failed to initialize session management:', error);
+      }
+    };
+    
+    initializeSessionManagement();
+  }, []);
+
+  // Save session changes
+  const saveSessionStore = useCallback(async (newStore: SessionStore) => {
+    try {
+      await SessionManager.saveSessions(newStore);
+      setSessionStore(newStore);
+    } catch (error) {
+      console.error('Failed to save session store:', error);
+    }
+  }, []);
+
+  // Convert legacy message to enhanced format
+  const convertToEnhancedMessage = useCallback((legacyMsg: any): Message => {
+    return {
+      id: MessageProcessor.generateMessageId(),
+      role: legacyMsg.sender === 'user' ? 'user' : 
+            legacyMsg.sender === 'agent' ? 'assistant' : 'system',
+      content: legacyMsg.message,
+      timestamp: new Date().toISOString()
+    };
+  }, []);
 
   const handleSend = useCallback(async () => {
     if (!input.trim()) return;
@@ -49,6 +108,32 @@ export default function Home() {
     // Update STM buffer with user message
     const newSTM = [...shortTermBuffer, { role: 'user', content: userText }].slice(-5);
 
+    // Enhanced session management - ensure we have a current session
+    let session = currentSession;
+    if (!session && sessionStore) {
+      session = SessionManager.createNewSession();
+      const newStore: SessionStore = {
+        ...sessionStore,
+        sessions: { ...sessionStore.sessions, [session.id]: session },
+        currentSessionId: session.id
+      };
+      await saveSessionStore(newStore);
+      setCurrentSession(session);
+      setSessionId(session.id);
+    }
+
+    // Add user message to enhanced session
+    if (session && sessionStore) {
+      const enhancedUserMsg = convertToEnhancedMessage(userMsg);
+      const updatedSession = SessionManager.addMessageToSession(session, enhancedUserMsg);
+      const updatedStore: SessionStore = {
+        ...sessionStore,
+        sessions: { ...sessionStore.sessions, [updatedSession.id]: updatedSession }
+      };
+      await saveSessionStore(updatedStore);
+      setCurrentSession(updatedSession);
+    }
+
     try {
       const res = await fetch("/api/athena-mistral", {
         method: "POST",
@@ -56,7 +141,7 @@ export default function Home() {
         body: JSON.stringify({
           message: userText,
           shortTermBuffer: newSTM,
-          userId: sessionId,
+          userId: session?.id || sessionId,
         }),
       });
       if (!res.ok) {
@@ -76,25 +161,50 @@ export default function Home() {
       };
       setMessages((msgs) => [...msgs, agentMsg]);
       
+      // Add agent message to enhanced session
+      if (session && sessionStore) {
+        const enhancedAgentMsg = convertToEnhancedMessage(agentMsg);
+        const updatedSession = SessionManager.addMessageToSession(currentSession || session, enhancedAgentMsg);
+        const updatedStore: SessionStore = {
+          ...sessionStore,
+          sessions: { ...sessionStore.sessions, [updatedSession.id]: updatedSession }
+        };
+        await saveSessionStore(updatedStore);
+        setCurrentSession(updatedSession);
+      }
+      
       // Update session with last message
       if ((window as any).updateAthenaSession) {
         (window as any).updateAthenaSession(agentMsg.message);
       }
     } catch (e) {
       console.error("Error:", e);
-      setMessages((msgs) => [
-        ...msgs,
-        {
-          id: messageId.current++,
-          message:
-            "I'm having trouble connecting to the AI service right now. Please try again in a moment.",
-          sender: "agent",
-        },
-      ]);
+      const errorMsg = {
+        id: messageId.current++,
+        message:
+          "I'm having trouble connecting to the AI service right now. Please try again in a moment.",
+        sender: "agent" as const,
+      };
+      setMessages((msgs) => [...msgs, errorMsg]);
+      
+      // Add error message to enhanced session
+      if (session && sessionStore) {
+        const enhancedErrorMsg = {
+          ...convertToEnhancedMessage(errorMsg),
+          hasError: true
+        };
+        const updatedSession = SessionManager.addMessageToSession(currentSession || session, enhancedErrorMsg);
+        const updatedStore: SessionStore = {
+          ...sessionStore,
+          sessions: { ...sessionStore.sessions, [updatedSession.id]: updatedSession }
+        };
+        await saveSessionStore(updatedStore);
+        setCurrentSession(updatedSession);
+      }
     } finally {
       setLoading(false);
     }
-  }, [input, shortTermBuffer, sessionId]);
+  }, [input, shortTermBuffer, sessionId, currentSession, sessionStore, saveSessionStore, convertToEnhancedMessage]);
 
   const handleAgentChange = useCallback((agent: Agent) => {
     setCurrentAgent(agent);
@@ -107,31 +217,75 @@ export default function Home() {
     setMessages((msgs) => [...msgs, switchMsg]);
   }, []);
 
-  // Session management handlers
-  const handleSessionChange = useCallback((newSessionId: string) => {
-    // Save current session state
-    try {
-      const sessionData = {
-        messages,
-        shortTermBuffer,
-        messageId: messageId.current
-      };
-      localStorage.setItem(`session_${sessionId}`, JSON.stringify(sessionData));
-    } catch (err) {
-      console.warn('Failed to save current session:', err);
-    }
-
+  // Enhanced session management handlers
+  const handleSessionChange = useCallback(async (newSessionId: string) => {
+    if (!sessionStore) return;
+    
+    // Save current session state to enhanced store (already saved in handleSend)
+    
     // Load new session state
     try {
+      const session = sessionStore.sessions[newSessionId];
+      if (session) {
+        // Load from enhanced session
+        setCurrentSession(session);
+        
+        // Convert to legacy format for existing UI
+        const legacyMessages = session.messages.map((msg, index) => ({
+          id: index + 1,
+          message: msg.content,
+          sender: msg.role === 'user' ? 'user' as const : 
+                 msg.role === 'assistant' ? 'agent' as const : 'system' as const
+        }));
+        
+        setMessages(legacyMessages);
+        messageId.current = legacyMessages.length + 1;
+        setShowGreeting(legacyMessages.length === 0);
+        
+        // Update current session in store
+        const updatedStore: SessionStore = {
+          ...sessionStore,
+          currentSessionId: newSessionId
+        };
+        await saveSessionStore(updatedStore);
+      } else {
+        // New session - create enhanced session
+        const newSession = SessionManager.createNewSession();
+        setCurrentSession(newSession);
+        
+        // Reset to initial state
+        setMessages([
+          {
+            id: 1,
+            message:
+              "Greetings, Commander. I'm ATHENA, your Intelligent Overseer Agent. I'm here to help you coordinate complex projects, manage tasks, and provide strategic insights. My memory systems are online and I'm ready to assist with whatever challenges you're facing. What's our first objective?",
+            sender: "agent",
+          },
+        ]);
+        setShortTermBuffer([]);
+        messageId.current = 2;
+        setShowGreeting(true);
+        
+        // Save new session to store
+        const updatedStore: SessionStore = {
+          ...sessionStore,
+          sessions: { ...sessionStore.sessions, [newSession.id]: newSession },
+          currentSessionId: newSession.id
+        };
+        await saveSessionStore(updatedStore);
+      }
+    } catch (err) {
+      console.warn('Failed to load enhanced session:', err);
+      // Fallback to legacy session loading
       const savedSession = localStorage.getItem(`session_${newSessionId}`);
       if (savedSession) {
         const sessionData = JSON.parse(savedSession);
         setMessages(sessionData.messages || []);
         setShortTermBuffer(sessionData.shortTermBuffer || []);
         messageId.current = sessionData.messageId || 2;
-        setShowGreeting(false); // Don't show greeting when switching sessions
+        setShowGreeting(false);
       } else {
-        // New session - reset to initial state
+        // Reset to default state on error
         setMessages([
           {
             id: 1,
@@ -144,29 +298,40 @@ export default function Home() {
         messageId.current = 2;
         setShowGreeting(true);
       }
-    } catch (err) {
-      console.warn('Failed to load session:', err);
-      // Reset to default state on error
-      setMessages([
-        {
-          id: 1,
-          message:
-            "Greetings, Commander. I'm ATHENA, your Intelligent Overseer Agent. I'm here to help you coordinate complex projects, manage tasks, and provide strategic insights. My memory systems are online and I'm ready to assist with whatever challenges you're facing. What's our first objective?",
-          sender: "agent",
-        },
-      ]);
-      setShortTermBuffer([]);
-      messageId.current = 2;
-      setShowGreeting(true);
     }
 
     setSessionId(newSessionId);
-  }, [messages, shortTermBuffer, sessionId]);
+  }, [sessionStore, saveSessionStore]);
 
-  const handleNewSession = useCallback(() => {
-    const newSessionId = `session_${Date.now()}`;
-    handleSessionChange(newSessionId);
-  }, [handleSessionChange]);
+  const handleNewSession = useCallback(async () => {
+    if (!sessionStore) return;
+    
+    const newSession = SessionManager.createNewSession();
+    const newSessionId = newSession.id;
+    
+    // Create new enhanced session
+    const updatedStore: SessionStore = {
+      ...sessionStore,
+      sessions: { ...sessionStore.sessions, [newSessionId]: newSession },
+      currentSessionId: newSessionId
+    };
+    await saveSessionStore(updatedStore);
+    setCurrentSession(newSession);
+    
+    // Reset UI to initial state
+    setMessages([
+      {
+        id: 1,
+        message:
+          "Greetings, Commander. I'm ATHENA, your Intelligent Overseer Agent. I'm here to help you coordinate complex projects, manage tasks, and provide strategic insights. My memory systems are online and I'm ready to assist with whatever challenges you're facing. What's our first objective?",
+        sender: "agent",
+      },
+    ]);
+    setShortTermBuffer([]);
+    messageId.current = 2;
+    setShowGreeting(true);
+    setSessionId(newSessionId);
+  }, [sessionStore, saveSessionStore]);
 
   // Handle sidebar collapse state
   const handleSidebarCollapse = useCallback((isCollapsed: boolean) => {
@@ -193,6 +358,11 @@ export default function Home() {
     }
     injectMemoryContext();
   }, []);
+
+  // Scroll to bottom when messages change
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
 
 
   return (

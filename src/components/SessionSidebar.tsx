@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect } from 'react';
+import { SessionManager } from '@/lib/sessionManager';
+import { Session as EnhancedSession, SessionStore } from '@/types/chat';
 
 interface Session {
   id: string;
@@ -25,6 +27,9 @@ export default function SessionSidebar({
   const [sessions, setSessions] = useState<Session[]>([]);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  
+  // Enhanced session management
+  const [sessionStore, setSessionStore] = useState<SessionStore | null>(null);
 
   // Filter sessions based on search term
   const filteredSessions = sessions.filter(session => 
@@ -62,6 +67,40 @@ export default function SessionSidebar({
     loadSessions();
   }, []);
 
+  // Initialize enhanced session management
+  useEffect(() => {
+    const initializeEnhancedSessions = async () => {
+      try {
+        const store = await SessionManager.loadSessions();
+        setSessionStore(store);
+        
+        // Sync enhanced sessions with legacy format
+        const enhancedSessions = Object.values(store.sessions)
+          .filter(s => !s.isArchived)
+          .map(s => ({
+            id: s.id,
+            name: s.title,
+            timestamp: new Date(s.updatedAt),
+            lastMessage: s.messages.length > 0 
+              ? s.messages[s.messages.length - 1].content.slice(0, 100) + '...'
+              : 'New conversation'
+          }))
+          .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+        
+        // Merge with existing sessions, preferring enhanced data
+        setSessions(prevSessions => {
+          const enhancedIds = new Set(enhancedSessions.map(s => s.id));
+          const legacyOnly = prevSessions.filter(s => !enhancedIds.has(s.id));
+          return [...enhancedSessions, ...legacyOnly];
+        });
+      } catch (error) {
+        console.error('Failed to initialize enhanced sessions:', error);
+      }
+    };
+    
+    initializeEnhancedSessions();
+  }, []);
+
   // Save sessions to localStorage when sessions change
   useEffect(() => {
     try {
@@ -72,13 +111,14 @@ export default function SessionSidebar({
   }, [sessions]);
 
   // Add or update current session
-  const updateCurrentSession = (lastMessage: string) => {
+  const updateCurrentSession = async (lastMessage: string) => {
+    // Update legacy session format
     setSessions(prev => {
       const existing = prev.find(s => s.id === currentSessionId);
       if (existing) {
         return prev.map(s => 
           s.id === currentSessionId 
-            ? { ...s, lastMessage, timestamp: new Date() }
+            ? { ...s, lastMessage: lastMessage.slice(0, 100) + '...', timestamp: new Date() }
             : s
         );
       } else {
@@ -86,11 +126,38 @@ export default function SessionSidebar({
           id: currentSessionId,
           name: `Session ${prev.length + 1}`,
           timestamp: new Date(),
-          lastMessage
+          lastMessage: lastMessage.slice(0, 100) + '...'
         };
         return [newSession, ...prev];
       }
     });
+
+    // Update enhanced session store if available
+    if (sessionStore) {
+      try {
+        const enhancedSession = sessionStore.sessions[currentSessionId];
+        if (enhancedSession) {
+          // Session already exists in enhanced store, will be updated by main page
+        } else {
+          // Create new enhanced session if it doesn't exist
+          const newEnhancedSession = SessionManager.createNewSession(
+            `Session ${Object.keys(sessionStore.sessions).length + 1}`,
+            'user'
+          );
+          
+          const updatedStore: SessionStore = {
+            ...sessionStore,
+            sessions: { ...sessionStore.sessions, [currentSessionId]: { ...newEnhancedSession, id: currentSessionId } },
+            currentSessionId: currentSessionId
+          };
+          
+          await SessionManager.saveSessions(updatedStore);
+          setSessionStore(updatedStore);
+        }
+      } catch (error) {
+        console.error('Failed to update enhanced session:', error);
+      }
+    }
   };
 
   // Expose method for parent to update session
