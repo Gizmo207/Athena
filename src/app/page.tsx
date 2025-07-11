@@ -59,7 +59,8 @@ export default function Home() {
             id: index + 1,
             message: msg.content,
             sender: msg.role === 'user' ? 'user' as const : 
-                   msg.role === 'assistant' ? 'agent' as const : 'system' as const
+                   msg.role === 'assistant' ? 'agent' as const : 'system' as const,
+            useTypewriter: false // Existing messages don't need typewriter
           }));
           
           if (legacyMessages.length > 0) {
@@ -158,6 +159,7 @@ export default function Home() {
         id: messageId.current++,
         message: data.reply || "I apologize, but I couldn't generate a response.",
         sender: "agent" as "agent",
+        useTypewriter: true, // Enable typewriter for new responses
       };
       setMessages((msgs) => [...msgs, agentMsg]);
       
@@ -184,6 +186,7 @@ export default function Home() {
         message:
           "I'm having trouble connecting to the AI service right now. Please try again in a moment.",
         sender: "agent" as const,
+        useTypewriter: true, // Enable typewriter for error messages too
       };
       setMessages((msgs) => [...msgs, errorMsg]);
       
@@ -235,7 +238,8 @@ export default function Home() {
           id: index + 1,
           message: msg.content,
           sender: msg.role === 'user' ? 'user' as const : 
-                 msg.role === 'assistant' ? 'agent' as const : 'system' as const
+                 msg.role === 'assistant' ? 'agent' as const : 'system' as const,
+          useTypewriter: false // Existing messages don't need typewriter
         }));
         
         setMessages(legacyMessages);
@@ -260,6 +264,7 @@ export default function Home() {
             message:
               "Greetings, Commander. I'm ATHENA, your Intelligent Overseer Agent. I'm here to help you coordinate complex projects, manage tasks, and provide strategic insights. My memory systems are online and I'm ready to assist with whatever challenges you're facing. What's our first objective?",
             sender: "agent",
+            useTypewriter: false,
           },
         ]);
         setShortTermBuffer([]);
@@ -292,6 +297,7 @@ export default function Home() {
             message:
               "Greetings, Commander. I'm ATHENA, your Intelligent Overseer Agent. I'm here to help you coordinate complex projects, manage tasks, and provide strategic insights. My memory systems are online and I'm ready to assist with whatever challenges you're facing. What's our first objective?",
             sender: "agent",
+            useTypewriter: false,
           },
         ]);
         setShortTermBuffer([]);
@@ -325,6 +331,7 @@ export default function Home() {
         message:
           "Greetings, Commander. I'm ATHENA, your Intelligent Overseer Agent. I'm here to help you coordinate complex projects, manage tasks, and provide strategic insights. My memory systems are online and I'm ready to assist with whatever challenges you're facing. What's our first objective?",
         sender: "agent",
+        useTypewriter: false,
       },
     ]);
     setShortTermBuffer([]);
@@ -521,8 +528,10 @@ export default function Home() {
                 >
                   <ChatBubble
                     message={msg.message}
-                    sender={msg.sender as 'user' | 'agent'}
+                    sender={msg.sender as 'user' | 'agent' | 'system'}
                     agentName={currentAgent.name}
+                    useTypewriter={msg.useTypewriter || false}
+                    typewriterSpeed={sessionStore?.settings?.typewriterSpeed || 30}
                   />
                 </div>
               ))}
