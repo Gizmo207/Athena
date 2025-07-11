@@ -4,8 +4,7 @@ import { AthenaMemoryManager } from '../../lib/memory-manager';
 import { sanitizeDates } from '../../lib/utils/dateSanitizer';
 import { routeToAgent } from '../../lib/config';
 
-// Initialize memory manager
-const memoryManager = new AthenaMemoryManager();
+// Enhanced Athena system prompt with delegation examples
 
 // Enhanced Athena system prompt with delegation examples
 const ATHENA_SYSTEM_PROMPT = `You are ATHENA - Peter Bernaiche's personal AI Overseer and strategic partner.
@@ -87,6 +86,22 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse<ApiResponse | { error: string }>
 ) {
+  let memoryManager: AthenaMemoryManager | undefined;
+  try {
+    memoryManager = new AthenaMemoryManager();
+  } catch (initError: any) {
+    console.warn('Qdrant or memory manager unavailable:', initError);
+    if (req.method !== 'POST') {
+      return res.status(405).json({ error: 'Method not allowed' });
+    }
+    // warning is not part of ApiResponse type, so include as extra property
+    return res.status(200).json({
+      reply: '',
+      shortTermBuffer: [],
+      memoryContext: '',
+      warning: 'Memory system unavailable (Qdrant or embedding failure)'
+    } as any);
+  }
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -130,7 +145,18 @@ export default async function handler(
 
     // Step 1: Retrieve memory context
     console.log('🧠 Step 1: Retrieving memory context...');
-    const memoryContext = await memoryManager.buildMemoryContext(message, userId, shortTermBuffer);
+    let memoryContext = '';
+    try {
+      memoryContext = await memoryManager.buildMemoryContext(message, userId, shortTermBuffer);
+    } catch (contextError) {
+      console.warn('Memory context unavailable:', contextError);
+      return res.status(200).json({
+        reply: '',
+        shortTermBuffer: [],
+        memoryContext: '',
+        warning: 'Memory system unavailable (context error or embedding failure)'
+      });
+    }
     
     // Step 2: Agent routing analysis
     console.log('🎯 Step 2: Analyzing agent routing...');
@@ -181,20 +207,18 @@ export default async function handler(
       { role: 'assistant' as const, content: response }
     ].slice(-5); // Keep only last 5 messages
 
-    // Step 7: Extract and store facts (async)
+    // Step 7: Extract and store facts (sync for debugging)
     console.log('🧠 Step 7: Extracting facts...');
-    const factsPromise = memoryManager.extractAndStoreFacts({
-      userMessage: message,
-      assistantResponse: response,
-      userId,
-    });
-
-    // Don't wait for fact extraction to complete
-    factsPromise.then(facts => {
-      console.log(`✅ Extracted ${facts.length} facts asynchronously`);
-    }).catch(error => {
+    try {
+      const facts = await memoryManager.extractAndStoreFacts({
+        userMessage: message,
+        assistantResponse: response,
+        userId,
+      });
+      console.log(`✅ Extracted ${facts.length} facts synchronously`);
+    } catch (error) {
       console.error('❌ Fact extraction failed:', error);
-    });
+    }
 
     console.log('✅ Response generation completed');
 

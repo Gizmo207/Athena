@@ -120,8 +120,7 @@ export async function storeMemoryFact(
   try {
     console.log(`💾 Storing fact for userId: ${fact.userId} - ${fact.key} = ${fact.value}`);
     console.log(`📏 Embedding dimensions: ${embedding.length}`);
-    
-    // Simplified upsert without filters for debugging
+
     await withRetry(() => qdrantClient.upsert(COLLECTION_NAME, {
       wait: true,
       points: [
@@ -129,11 +128,11 @@ export async function storeMemoryFact(
           id: fact.id,
           vector: embedding,
           payload: {
-            userId: fact.userId,  // Always include userId for filtering
-            factKey: fact.key,  // normalized for search
-            factValue: fact.value,  // normalized for search
-            originalKey: originalKey || fact.key,  // original casing for display
-            originalValue: originalValue || fact.value,  // original casing for display
+            userId: fact.userId,
+            factKey: fact.key,
+            factValue: fact.value,
+            originalKey: originalKey || fact.key,
+            originalValue: originalValue || fact.value,
             factType: fact.type,
             timestamp: fact.timestamp,
             originMessage: fact.originMessage,
@@ -141,12 +140,11 @@ export async function storeMemoryFact(
         },
       ],
     }));
-    
+
     console.log(`✅ Memory fact stored successfully for user: ${fact.userId}`);
   } catch (error: any) {
     console.error(`❌ Failed to store memory fact for user ${fact.userId}:`, error);
-    // Don't throw error - just log it and continue
-    console.log('Continuing despite storage error...');
+    throw new Error(`Memory fact storage failed for user ${fact.userId}: ${error.message}`);
   }
 }
 
@@ -172,10 +170,17 @@ export async function searchMemoryFacts(
       with_payload: true,
       filter: {
         must: [
-          { key: 'userId', match: { value: userId } }
+          {
+            key: 'userId',
+            match: {
+              value: userId
+            }
+          }
         ]
-      }
+      },
     });
+
+    console.log('Qdrant filter being sent:', JSON.stringify({ userId: userId }, null, 2));
 
     const results: SearchResult[] = searchResult.map(result => ({
       fact: {
@@ -209,20 +214,33 @@ export async function searchMemoryFacts(
 export async function getAllMemoryFacts(userId: string): Promise<MemoryFact[]> {
   try {
     console.log(`📋 Retrieving all facts for user: ${userId}`);
-    
+
     const scrollResult = await qdrantClient.scroll(COLLECTION_NAME, {
       limit: 1000,
       with_payload: true,
       filter: {
         must: [
-          { key: 'userId', match: { value: userId } }
-        ]
-      }
+          {
+            field: 'userId',
+            match: {
+              value: userId,
+            },
+          },
+        ],
+      },
     });
 
+    console.log('Scroll result:', scrollResult);
+
     const facts: MemoryFact[] = scrollResult.points
-      .filter(point => point.payload?.userId === userId) // Additional validation
-      .map(point => ({
+      .filter((point) => {
+        const isValid = point.payload?.userId === userId;
+        if (!isValid) {
+          console.warn('Invalid payload detected:', point.payload);
+        }
+        return isValid;
+      })
+      .map((point) => ({
         id: point.id as string,
         type: point.payload?.factType as MemoryFact['type'],
         key: point.payload?.factKey as string,
@@ -232,11 +250,11 @@ export async function getAllMemoryFacts(userId: string): Promise<MemoryFact[]> {
         userId: point.payload?.userId as string,
       }));
 
-    console.log(`� Retrieved ${facts.length} facts for user ${userId}`);
+    console.log(`📋 Retrieved ${facts.length} facts for user ${userId}`);
     return facts;
   } catch (error) {
     console.error(`❌ Failed to retrieve all memory facts for user ${userId}:`, error);
-    return []; // Return empty array instead of throwing
+    return [];
   }
 }
 
@@ -269,5 +287,35 @@ export async function testQdrantConnection(): Promise<boolean> {
   } catch (error: any) {
     console.error('❌ Qdrant connection test failed:', error.message);
     return false;
+  }
+}
+
+/**
+ * Debug function to check Qdrant collection existence, configuration, and stored data
+ */
+export async function debugCollection() {
+  try {
+    // Check if collection exists
+    const collections = await qdrantClient.getCollections();
+    console.log('Available collections:', collections);
+
+    // Check collection info
+    const collectionInfo = await qdrantClient.getCollection(COLLECTION_NAME);
+    console.log('Collection info:', collectionInfo);
+
+    // Check collection stats
+    const stats = await qdrantClient.getCollection(COLLECTION_NAME);
+    console.log('Collection stats:', stats);
+
+    // Try to scroll ALL points (no filter)
+    const allPoints = await qdrantClient.scroll(COLLECTION_NAME, {
+      limit: 100,
+      with_payload: true,
+      with_vector: false
+    });
+    console.log('All points in collection:', allPoints);
+
+  } catch (error) {
+    console.error('Debug collection error:', error);
   }
 }
