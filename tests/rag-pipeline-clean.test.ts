@@ -89,16 +89,50 @@ class MockVectorStore {
       throw new Error('Vector store connection failed');
     }
 
+    console.log('=== MOCK SEARCH ENTRY ===');
+    console.log('Search query:', query);
+    console.log('User ID:', userId);
+    console.log('Available facts:', this.facts.filter(f => f.userId === userId).map(f => f.content));
+
     // Normalize query for case-insensitive search
     const normalizedQuery = query.toLowerCase();
     const queryWords = normalizedQuery.split(' ');
     
-    return this.facts
-      .filter(fact => 
-        fact.userId === userId && 
-        queryWords.some(word => fact.content.toLowerCase().includes(word))
-      )
+    const results = this.facts
+      .filter(fact => {
+        if (fact.userId !== userId) return false;
+        
+        const factContent = fact.content.toLowerCase();
+        
+        // Check for exact word matches or semantic matches
+        return queryWords.some(word => {
+          // Remove punctuation from search word
+          const cleanWord = word.replace(/[^\w]/g, '');
+          if (!cleanWord) return false;
+          
+          // Direct inclusion check
+          if (factContent.includes(cleanWord)) {
+            console.log(`Match found: "${cleanWord}" in "${factContent}"`);
+            return true;
+          }
+          
+          // Handle singular/plural variations for key words
+          if (cleanWord === 'preferences' && factContent.includes('preference')) {
+            console.log(`Semantic match: "${cleanWord}" matches "preference" in "${factContent}"`);
+            return true;
+          }
+          if (cleanWord === 'preference' && factContent.includes('preferences')) {
+            console.log(`Semantic match: "${cleanWord}" matches "preferences" in "${factContent}"`);
+            return true;
+          }
+          
+          return false;
+        });
+      })
       .slice(0, limit);
+      
+    console.log('Search results:', results.map(f => f.content));
+    return results;
   }
 
   async store(fact: MockFact): Promise<void> {
@@ -133,6 +167,7 @@ class MockVectorStore {
 
   clear(): void {
     this.facts = [];
+    this.isConnected = true; // Reset connection status
   }
 
   size(): number {
