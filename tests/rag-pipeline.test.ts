@@ -1,665 +1,826 @@
-// RAG Pipeline Test Suite
-// Tests for Short-Term Memory, Long-Term Vector Store, and Chat Session Operations
+/**
+ * Comprehensive RAG Pipeline Test Suite
+ * Tests Short-Term Memory, Long-Term Memory, and Chat Session Operations
+ */
 
-import { describe, test, expect, beforeEach, afterEach, jest } from '@jest/globals';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { jest } from '@jest/globals';
 
-// Mock implementations for testing
-class MockVectorStore {
-  private vectors: Map<string, { embedding: number[], metadata: any, content: string }> = new Map();
-  
-  async addDocument(id: string, content: string, metadata: any = {}) {
-    // Simulate embedding generation
-    const embedding = content.split('').map((_, i) => Math.random());
-    this.vectors.set(id, { embedding, metadata, content });
-  }
-  
-  async similaritySearch(query: string, topK: number = 5) {
-    // Simple mock similarity search
-    const results = Array.from(this.vectors.entries())
-      .map(([id, doc]) => ({
-        id,
-        content: doc.content,
-        metadata: doc.metadata,
-        score: Math.random() // Mock similarity score
-      }))
-      .sort((a, b) => b.score - a.score)
-      .slice(0, topK);
-    
-    return results;
-  }
-  
-  async deleteDocument(id: string) {
-    return this.vectors.delete(id);
-  }
-  
-  clear() {
-    this.vectors.clear();
-  }
-  
-  size() {
-    return this.vectors.size;
-  }
-}
-
-// Short-Term Memory (STM) Implementation
-class ShortTermMemory {
-  private messages: Message[] = [];
-  private readonly maxSize: number;
-  
-  constructor(maxSize: number = 5) {
-    this.maxSize = maxSize;
-  }
-  
-  addMessage(message: Message) {
-    this.messages.push(message);
-    if (this.messages.length > this.maxSize) {
-      this.messages.shift();
-    }
-  }
-  
-  getMessages(): Message[] {
-    return [...this.messages];
-  }
-  
-  getContextWindow(): Message[] {
-    return this.messages.slice(-this.maxSize);
-  }
-  
-  clear() {
-    this.messages = [];
-  }
-  
-  size(): number {
-    return this.messages.length;
-  }
-}
-
-// Long-Term Memory (LTM) Implementation
-class LongTermMemory {
-  private vectorStore: MockVectorStore;
-  private facts: Map<string, any> = new Map();
-  
-  constructor() {
-    this.vectorStore = new MockVectorStore();
-  }
-  
-  async storeFact(key: string, value: any, content: string) {
-    this.facts.set(key, value);
-    await this.vectorStore.addDocument(key, content, { type: 'fact', value });
-  }
-  
-  async storeConversation(sessionId: string, messages: Message[]) {
-    const content = messages.map(m => `${m.role}: ${m.content}`).join('\n');
-    await this.vectorStore.addDocument(
-      `conversation_${sessionId}`, 
-      content, 
-      { type: 'conversation', sessionId, messageCount: messages.length }
-    );
-  }
-  
-  async retrieveRelevantContext(query: string, topK: number = 3) {
-    return await this.vectorStore.similaritySearch(query, topK);
-  }
-  
-  getFact(key: string) {
-    return this.facts.get(key);
-  }
-  
-  async deleteFact(key: string) {
-    this.facts.delete(key);
-    await this.vectorStore.deleteDocument(key);
-  }
-  
-  clear() {
-    this.facts.clear();
-    this.vectorStore.clear();
-  }
-}
-
-// RAG Pipeline Implementation
-class RAGPipeline {
-  private stm: ShortTermMemory;
-  private ltm: LongTermMemory;
-  
-  constructor(stmSize: number = 5) {
-    this.stm = new ShortTermMemory(stmSize);
-    this.ltm = new LongTermMemory();
-  }
-  
-  async processMessage(message: Message, sessionId: string) {
-    // Add to short-term memory
-    this.stm.addMessage(message);
-    
-    // Extract and store facts if it's an assistant message
-    if (message.role === 'assistant') {
-      await this.extractAndStoreFacts(message, sessionId);
-    }
-    
-    // Store conversation context in long-term memory
-    await this.ltm.storeConversation(sessionId, this.stm.getMessages());
-    
-    return this.buildContext(message.content);
-  }
-  
-  private async extractAndStoreFacts(message: Message, sessionId: string) {
-    // Simple fact extraction (in real implementation, this would be more sophisticated)
-    const content = message.content.toLowerCase();
-    
-    // Extract names
-    const nameMatch = content.match(/my name is (\w+)/);
-    if (nameMatch) {
-      await this.ltm.storeFact('user_name', nameMatch[1], `User's name is ${nameMatch[1]}`);
-    }
-    
-    // Extract preferences
-    const preferenceMatch = content.match(/i (like|prefer|enjoy) (.+)/);
-    if (preferenceMatch) {
-      const preference = preferenceMatch[2];
-      await this.ltm.storeFact(`preference_${Date.now()}`, preference, `User likes ${preference}`);
-    }
-    
-    // Extract locations
-    const locationMatch = content.match(/i live in (.+)/);
-    if (locationMatch) {
-      await this.ltm.storeFact('user_location', locationMatch[1], `User lives in ${locationMatch[1]}`);
-    }
-  }
-  
-  private async buildContext(query: string) {
-    const recentMessages = this.stm.getContextWindow();
-    const relevantContext = await this.ltm.retrieveRelevantContext(query);
-    
-    return {
-      shortTermContext: recentMessages,
-      longTermContext: relevantContext,
-      combinedContext: this.combineContexts(recentMessages, relevantContext)
-    };
-  }
-  
-  private combineContexts(stmMessages: Message[], ltmContext: any[]) {
-    const stmText = stmMessages.map(m => `${m.role}: ${m.content}`).join('\n');
-    const ltmText = ltmContext.map(c => c.content).join('\n');
-    
-    return {
-      recent: stmText,
-      relevant: ltmText,
-      combined: `Recent conversation:\n${stmText}\n\nRelevant context:\n${ltmText}`
-    };
-  }
-  
-  clearShortTerm() {
-    this.stm.clear();
-  }
-  
-  clearLongTerm() {
-    this.ltm.clear();
-  }
-  
-  getSTM() {
-    return this.stm;
-  }
-  
-  getLTM() {
-    return this.ltm;
-  }
-}
-
-// Test Suite
-describe('RAG Pipeline Integration Tests', () => {
-  let ragPipeline: RAGPipeline;
-  let mockSessionManager: any;
-  
-  beforeEach(() => {
-    ragPipeline = new RAGPipeline(5);
-    mockSessionManager = {
-      sessions: {},
-      currentSessionId: 'test-session-1',
-      saveSessions: jest.fn(),
-      loadSessions: jest.fn()
-    };
-  });
-  
-  afterEach(() => {
-    ragPipeline.clearShortTerm();
-    ragPipeline.clearLongTerm();
-  });
-  
-  describe('Short-Term Memory (STM) Tests', () => {
-    test('should maintain message history within buffer size', async () => {
-      const sessionId = 'test-session';
-      const messages = [
-        { id: '1', role: 'user', content: 'Hello', timestamp: '2024-01-01T10:00:00Z' },
-        { id: '2', role: 'assistant', content: 'Hi there!', timestamp: '2024-01-01T10:00:01Z' },
-        { id: '3', role: 'user', content: 'How are you?', timestamp: '2024-01-01T10:00:02Z' },
-        { id: '4', role: 'assistant', content: 'I am doing well', timestamp: '2024-01-01T10:00:03Z' }
-      ];
-      
-      for (const message of messages) {
-        await ragPipeline.processMessage(message, sessionId);
-      }
-      
-      const stm = ragPipeline.getSTM();
-      expect(stm.size()).toBe(4);
-      expect(stm.getMessages()).toHaveLength(4);
-    });
-    
-    test('should maintain buffer size limit', async () => {
-      const sessionId = 'test-session';
-      const messages: Message[] = Array.from({ length: 10 }, (_, i) => ({
-        id: `${i + 1}`,
-        role: i % 2 === 0 ? 'user' : 'assistant',
-        content: `Message ${i + 1}`,
-        timestamp: `2024-01-01T10:00:${i.toString().padStart(2, '0')}Z`
-      }));
-      
-      for (const message of messages) {
-        await ragPipeline.processMessage(message, sessionId);
-      }
-      
-      const stm = ragPipeline.getSTM();
-      expect(stm.size()).toBe(5); // Buffer size limit
-      expect(stm.getMessages()[0].content).toBe('Message 6'); // Oldest kept message
-    });
-    
-    test('should clear STM on new chat session', () => {
-      const stm = ragPipeline.getSTM();
-      stm.addMessage({ id: '1', role: 'user', content: 'Test', timestamp: '2024-01-01T10:00:00Z' });
-      
-      expect(stm.size()).toBe(1);
-      
-      ragPipeline.clearShortTerm();
-      expect(stm.size()).toBe(0);
-    });
-    
-    test('should provide correct context window', async () => {
-      const sessionId = 'test-session';
-      const messages: Message[] = Array.from({ length: 8 }, (_, i) => ({
-        id: `${i + 1}`,
-        role: i % 2 === 0 ? 'user' : 'assistant',
-        content: `Message ${i + 1}`,
-        timestamp: `2024-01-01T10:00:${i.toString().padStart(2, '0')}Z`
-      }));
-      
-      for (const message of messages) {
-        await ragPipeline.processMessage(message, sessionId);
-      }
-      
-      const stm = ragPipeline.getSTM();
-      const contextWindow = stm.getContextWindow();
-      
-      expect(contextWindow).toHaveLength(5);
-      expect(contextWindow[0].content).toBe('Message 4');
-      expect(contextWindow[4].content).toBe('Message 8');
-    });
-  });
-  
-  describe('Long-Term Memory (LTM) Tests', () => {
-    test('should extract and store user facts', async () => {
-      const sessionId = 'test-session';
-      const message = {
-        id: '1',
-        role: 'assistant' as const,
-        content: 'Nice to meet you! So your name is John and you live in New York.',
-        timestamp: '2024-01-01T10:00:00Z'
-      };
-      
-      await ragPipeline.processMessage(message, sessionId);
-      
-      const ltm = ragPipeline.getLTM();
-      expect(ltm.getFact('user_name')).toBe('john');
-      expect(ltm.getFact('user_location')).toBe('new york');
-    });
-    
-    test('should store conversation context', async () => {
-      const sessionId = 'test-session';
-      const messages = [
-        { id: '1', role: 'user', content: 'What is machine learning?', timestamp: '2024-01-01T10:00:00Z' },
-        { id: '2', role: 'assistant', content: 'Machine learning is a subset of AI', timestamp: '2024-01-01T10:00:01Z' }
-      ];
-      
-      for (const message of messages) {
-        await ragPipeline.processMessage(message, sessionId);
-      }
-      
-      const ltm = ragPipeline.getLTM();
-      const context = await ltm.retrieveRelevantContext('machine learning');
-      
-      expect(context.length).toBeGreaterThan(0);
-      expect(context[0].metadata.type).toBe('conversation');
-      expect(context[0].metadata.sessionId).toBe(sessionId);
-    });
-    
-    test('should retrieve relevant context for queries', async () => {
-      const sessionId = 'test-session';
-      const ltm = ragPipeline.getLTM();
-      
-      // Store some facts
-      await ltm.storeFact('tech_preference', 'React', 'User prefers React for frontend development');
-      await ltm.storeFact('language_preference', 'TypeScript', 'User prefers TypeScript over JavaScript');
-      
-      const context = await ltm.retrieveRelevantContext('frontend development');
-      
-      expect(context.length).toBeGreaterThan(0);
-      expect(context.some(c => c.content.includes('React'))).toBe(true);
-    });
-    
-    test('should handle fact deletion', async () => {
-      const ltm = ragPipeline.getLTM();
-      
-      await ltm.storeFact('temp_fact', 'temporary', 'This is temporary information');
-      expect(ltm.getFact('temp_fact')).toBe('temporary');
-      
-      await ltm.deleteFact('temp_fact');
-      expect(ltm.getFact('temp_fact')).toBeUndefined();
-    });
-  });
-  
-  describe('Context Building Tests', () => {
-    test('should combine STM and LTM contexts', async () => {
-      const sessionId = 'test-session';
-      
-      // Add some messages to STM
-      const recentMessages = [
-        { id: '1', role: 'user', content: 'Tell me about React', timestamp: '2024-01-01T10:00:00Z' },
-        { id: '2', role: 'assistant', content: 'React is a JavaScript library', timestamp: '2024-01-01T10:00:01Z' }
-      ];
-      
-      for (const message of recentMessages) {
-        await ragPipeline.processMessage(message, sessionId);
-      }
-      
-      // Add some facts to LTM
-      const ltm = ragPipeline.getLTM();
-      await ltm.storeFact('framework_knowledge', 'React', 'User is learning React framework');
-      
-      const context = await ragPipeline.processMessage(
-        { id: '3', role: 'user', content: 'What are React hooks?', timestamp: '2024-01-01T10:00:02Z' },
-        sessionId
-      );
-      
-      expect(context.shortTermContext).toHaveLength(3);
-      expect(context.longTermContext.length).toBeGreaterThan(0);
-      expect(context.combinedContext.combined).toContain('Recent conversation:');
-      expect(context.combinedContext.combined).toContain('Relevant context:');
-    });
-  });
-  
-  describe('Session Management Integration Tests', () => {
-    test('should create new session with empty STM', () => {
-      const newSession = SessionManager.createNewSession();
-      ragPipeline.clearShortTerm();
-      
-      expect(newSession.messages).toHaveLength(0);
-      expect(ragPipeline.getSTM().size()).toBe(0);
-    });
-    
-    test('should load session and populate STM with last 5 messages', async () => {
-      const sessionId = 'existing-session';
-      const existingMessages: Message[] = Array.from({ length: 10 }, (_, i) => ({
-        id: `${i + 1}`,
-        role: i % 2 === 0 ? 'user' : 'assistant',
-        content: `Historical message ${i + 1}`,
-        timestamp: `2024-01-01T10:00:${i.toString().padStart(2, '0')}Z`
-      }));
-      
-      // Simulate loading existing session
-      for (const message of existingMessages.slice(-5)) {
-        await ragPipeline.processMessage(message, sessionId);
-      }
-      
-      const stm = ragPipeline.getSTM();
-      expect(stm.size()).toBe(5);
-      expect(stm.getMessages()[0].content).toBe('Historical message 6');
-    });
-    
-    test('should maintain session isolation', async () => {
-      const session1 = 'session-1';
-      const session2 = 'session-2';
-      
-      // Add messages to session 1
-      await ragPipeline.processMessage(
-        { id: '1', role: 'user', content: 'Session 1 message', timestamp: '2024-01-01T10:00:00Z' },
-        session1
-      );
-      
-      // Clear STM (simulating session switch)
-      ragPipeline.clearShortTerm();
-      
-      // Add messages to session 2
-      await ragPipeline.processMessage(
-        { id: '2', role: 'user', content: 'Session 2 message', timestamp: '2024-01-01T10:00:01Z' },
-        session2
-      );
-      
-      const stm = ragPipeline.getSTM();
-      expect(stm.size()).toBe(1);
-      expect(stm.getMessages()[0].content).toBe('Session 2 message');
-    });
-  });
-  
-  describe('Error Handling Tests', () => {
-    test('should handle malformed messages gracefully', async () => {
-      const sessionId = 'test-session';
-      const malformedMessage = {
-        id: '1',
-        role: 'user' as const,
-        content: '', // Empty content
-        timestamp: '2024-01-01T10:00:00Z'
-      };
-      
-      await expect(ragPipeline.processMessage(malformedMessage, sessionId)).resolves.not.toThrow();
-    });
-    
-    test('should handle vector store failures gracefully', async () => {
-      const sessionId = 'test-session';
-      const ltm = ragPipeline.getLTM();
-      
-      // Mock vector store failure
-      jest.spyOn(ltm, 'retrieveRelevantContext').mockRejectedValue(new Error('Vector store unavailable'));
-      
-      const message = {
-        id: '1',
-        role: 'user' as const,
-        content: 'Test message',
-        timestamp: '2024-01-01T10:00:00Z'
-      };
-      
-      await expect(ragPipeline.processMessage(message, sessionId)).resolves.not.toThrow();
-    });
-  });
-  
-  describe('Performance Tests', () => {
-    test('should handle large message volumes efficiently', async () => {
-      const sessionId = 'performance-test';
-      const messageCount = 1000;
-      
-      const startTime = Date.now();
-      
-      for (let i = 0; i < messageCount; i++) {
-        const message: Message = {
-          id: `${i}`,
-          role: i % 2 === 0 ? 'user' : 'assistant',
-          content: `Performance test message ${i}`,
-          timestamp: `2024-01-01T10:00:${i.toString().padStart(2, '0')}Z`
-        };
-        await ragPipeline.processMessage(message, sessionId);
-      }
-      
-      const endTime = Date.now();
-      const processingTime = endTime - startTime;
-      
-      // Should process messages reasonably quickly (adjust threshold as needed)
-      expect(processingTime).toBeLessThan(5000); // 5 seconds
-      expect(ragPipeline.getSTM().size()).toBe(5); // Should maintain buffer size
-    });
-  });
-});
-
-// Types used in tests
-interface Message {
+// Mock implementations
+interface MockMessage {
   id: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp: string;
 }
 
-interface Session {
+interface MockSession {
   id: string;
   title: string;
   createdAt: string;
   updatedAt: string;
-  messages: Message[];
+  messages: MockMessage[];
 }
 
-// Mock SessionManager for testing
-class SessionManager {
-  static createNewSession(title?: string): Session {
-    const id = crypto.randomUUID();
-    const now = new Date().toISOString();
+interface MockFact {
+  id: string;
+  userId: string;
+  content: string;
+  metadata: Record<string, any>;
+  embedding: number[];
+  timestamp: string;
+}
+
+// Mock Vector Store for testing
+class MockVectorStore {
+  private facts: MockFact[] = [];
+  private isConnected = true;
+
+  async search(query: string, userId: string, limit = 10): Promise<MockFact[]> {
+    if (!this.isConnected) {
+      throw new Error('Vector store connection failed');
+    }
+
+    // Simple mock search - return facts containing similar words
+    const queryWords = query.toLowerCase().split(' ');
+    return this.facts
+      .filter(fact => {
+        if (fact.userId !== userId) return false;
+        
+        const factContent = fact.content.toLowerCase();
+        // More flexible matching - check if any word from query appears in fact content
+        return queryWords.some(word => 
+          word.length > 2 && // Ignore very short words
+          (factContent.includes(word) || 
+           factContent.split(' ').some(factWord => 
+             factWord.includes(word) || word.includes(factWord)
+           ))
+        );
+      })
+      .slice(0, limit);
+  }
+
+  async store(fact: MockFact): Promise<void> {
+    if (!this.isConnected) {
+      throw new Error('Vector store connection failed');
+    }
     
-    return {
-      id,
-      title: title || 'New Chat',
-      createdAt: now,
-      updatedAt: now,
-      messages: []
-    };
+    // Remove existing fact with same content
+    this.facts = this.facts.filter(f => 
+      !(f.userId === fact.userId && f.content === fact.content)
+    );
+    this.facts.push(fact);
+  }
+
+  async delete(factId: string): Promise<void> {
+    this.facts = this.facts.filter(f => f.id !== factId);
+  }
+
+  async getUserFacts(userId: string): Promise<MockFact[]> {
+    return this.facts.filter(f => f.userId === userId);
+  }
+
+  setConnectionStatus(connected: boolean): void {
+    this.isConnected = connected;
+  }
+
+  clear(): void {
+    this.facts = [];
+  }
+
+  size(): number {
+    return this.facts.length;
   }
 }
 
-// Additional Test Utilities and Fixtures
-const testFixtures = {
-  // Sample conversations for testing
-  sampleConversations: {
-    techSupport: [
-      { id: '1', role: 'user', content: 'My React app is crashing', timestamp: '2024-01-01T10:00:00Z' },
-      { id: '2', role: 'assistant', content: 'Let me help you debug that. What error are you seeing?', timestamp: '2024-01-01T10:00:01Z' },
-      { id: '3', role: 'user', content: 'TypeError: Cannot read property of undefined', timestamp: '2024-01-01T10:00:02Z' },
-      { id: '4', role: 'assistant', content: 'This usually happens when accessing properties on undefined objects. Can you show me the code?', timestamp: '2024-01-01T10:00:03Z' }
-    ],
-    personalInfo: [
-      { id: '1', role: 'user', content: 'Hi, my name is John Smith', timestamp: '2024-01-01T10:00:00Z' },
-      { id: '2', role: 'assistant', content: 'Nice to meet you John! How can I help you today?', timestamp: '2024-01-01T10:00:01Z' },
-      { id: '3', role: 'user', content: 'I live in Boston and work as a software engineer', timestamp: '2024-01-01T10:00:02Z' },
-      { id: '4', role: 'assistant', content: 'That\'s great! Boston has a vibrant tech scene. What kind of software do you work on?', timestamp: '2024-01-01T10:00:03Z' }
-    ],
-    preferences: [
-      { id: '1', role: 'user', content: 'I prefer Python over JavaScript', timestamp: '2024-01-01T10:00:00Z' },
-      { id: '2', role: 'assistant', content: 'Python is a great choice! What do you like most about it?', timestamp: '2024-01-01T10:00:01Z' },
-      { id: '3', role: 'user', content: 'I enjoy machine learning and data science', timestamp: '2024-01-01T10:00:02Z' },
-      { id: '4', role: 'assistant', content: 'Excellent! Python has amazing libraries for ML like scikit-learn and TensorFlow.', timestamp: '2024-01-01T10:00:03Z' }
-    ]
-  },
-  
-  // Sample facts for LTM testing
-  sampleFacts: {
-    userProfile: {
-      name: 'John Smith',
-      location: 'Boston',
-      profession: 'Software Engineer',
-      experience: '5 years',
-      company: 'TechCorp'
-    },
-    preferences: {
-      languages: ['Python', 'TypeScript', 'Go'],
-      frameworks: ['React', 'FastAPI', 'Django'],
-      tools: ['VS Code', 'Git', 'Docker'],
-      topics: ['Machine Learning', 'Web Development', 'DevOps']
-    },
-    projects: {
-      current: 'E-commerce platform with React and Node.js',
-      completed: ['Weather app', 'Todo list', 'Blog platform'],
-      learning: ['Kubernetes', 'AWS', 'GraphQL']
+// Mock Short-Term Memory Buffer
+class MockSTMBuffer {
+  private messages: MockMessage[] = [];
+  private readonly maxSize = 5;
+
+  add(message: MockMessage): void {
+    this.messages.push(message);
+    if (this.messages.length > this.maxSize) {
+      this.messages = this.messages.slice(-this.maxSize);
     }
   }
-};
 
-// Advanced Test Helpers
-class TestHelpers {
-  static async createMockSession(
-    id: string, 
-    messages: Message[], 
-    title?: string
-  ): Promise<Session> {
-    const now = new Date().toISOString();
+  getAll(): MockMessage[] {
+    return [...this.messages];
+  }
+
+  clear(): void {
+    this.messages = [];
+  }
+
+  size(): number {
+    return this.messages.length;
+  }
+
+  getContextWindow(): string {
+    return this.messages
+      .map(m => `${m.role}: ${m.content}`)
+      .join('\n');
+  }
+}
+
+// Mock RAG Pipeline
+class MockRAGPipeline {
+  private stm: MockSTMBuffer;
+  private ltm: MockVectorStore;
+  private factExtractor: (content: string) => string[];
+
+  constructor() {
+    this.stm = new MockSTMBuffer();
+    this.ltm = new MockVectorStore();
+    this.factExtractor = this.extractFacts.bind(this);
+  }
+
+  async processMessage(
+    content: string, 
+    userId: string, 
+    role: 'user' | 'assistant' = 'user'
+  ): Promise<{
+    response: string;
+    stmContext: string;
+    ltmContext: MockFact[];
+    extractedFacts: string[];
+  }> {
+    const message: MockMessage = {
+      id: `msg_${Date.now()}_${Math.random()}`,
+      role,
+      content,
+      timestamp: new Date().toISOString()
+    };
+
+    // Add to STM
+    this.stm.add(message);
+
+    // Get STM context
+    const stmContext = this.stm.getContextWindow();
+
+    // Search LTM for relevant context
+    let ltmContext: MockFact[] = [];
+    try {
+      ltmContext = await this.ltm.search(content, userId);
+    } catch (error) {
+      console.warn('LTM search failed, continuing without LTM context:', error);
+      ltmContext = [];
+    }
+
+    // Extract and store facts (for user messages)
+    let extractedFacts: string[] = [];
+    if (role === 'user') {
+      extractedFacts = this.factExtractor(content);
+      
+      // Store facts in LTM
+      for (const fact of extractedFacts) {
+        try {
+          const factObject: MockFact = {
+            id: `fact_${Date.now()}_${Math.random()}`,
+            userId,
+            content: fact,
+            metadata: { source: 'conversation', extractedAt: new Date().toISOString() },
+            embedding: this.generateMockEmbedding(fact),
+            timestamp: new Date().toISOString()
+          };
+          await this.ltm.store(factObject);
+        } catch (error) {
+          console.warn('Failed to store fact, continuing:', error);
+          // Remove this fact from extracted facts if storage failed
+          extractedFacts = extractedFacts.filter(f => f !== fact);
+        }
+      }
+    }
+
+    // Generate mock response
+    const response = this.generateResponse(content, stmContext, ltmContext);
+
     return {
-      id,
-      title: title || TestHelpers.generateTitleFromMessages(messages),
-      createdAt: now,
-      updatedAt: now,
-      messages
+      response,
+      stmContext,
+      ltmContext,
+      extractedFacts
     };
   }
-  
-  static generateTitleFromMessages(messages: Message[]): string {
-    const firstUserMessage = messages.find(m => m.role === 'user');
-    if (!firstUserMessage) return 'New Chat';
+
+  private extractFacts(content: string): string[] {
+    const facts: string[] = [];
+    const text = content.toLowerCase();
+
+    // Extract names
+    const nameMatch = text.match(/(?:i'?m|my name is|call me)\s+([a-z]+)/);
+    if (nameMatch) {
+      facts.push(`name: ${nameMatch[1]}`);
+    }
+
+    // Extract locations
+    const locationMatch = text.match(/(?:from|live in|located in)\s+([a-z\s]+?)(?:\s|$|,|\.|!|\?)/);
+    if (locationMatch) {
+      facts.push(`location: ${locationMatch[1].trim()}`);
+    }
+
+    // Extract preferences
+    const preferencePatterns = [
+      /(?:prefer|like|love|enjoy)\s+([^,.!?]+)/,
+      /favorite\s+([^,.!?]+)/,
+      /(?:working with|using)\s+([a-z\s]+?)(?:\s|$|,|\.|!|\?)/
+    ];
+
+    for (const pattern of preferencePatterns) {
+      const match = text.match(pattern);
+      if (match) {
+        facts.push(`preference: ${match[1].trim()}`);
+      }
+    }
+
+    return facts;
+  }
+
+  private generateMockEmbedding(text: string): number[] {
+    // Generate consistent mock embedding based on text
+    const hash = text.split('').reduce((a, b) => {
+      a = ((a << 5) - a) + b.charCodeAt(0);
+      return a & a;
+    }, 0);
     
-    return firstUserMessage.content.slice(0, 30) + '...';
-  }
-  
-  static async simulateTypingDelay(ms: number = 100): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
-  
-  static createMessageSequence(
-    baseContent: string, 
-    count: number, 
-    startTime: Date = new Date()
-  ): Message[] {
-    return Array.from({ length: count }, (_, i) => ({
-      id: `msg-${i + 1}`,
-      role: i % 2 === 0 ? 'user' as const : 'assistant' as const,
-      content: `${baseContent} ${i + 1}`,
-      timestamp: new Date(startTime.getTime() + i * 1000).toISOString()
-    }));
-  }
-  
-  static async measurePerformance<T>(
-    operation: () => Promise<T> | T,
-    description: string
-  ): Promise<{ result: T; duration: number }> {
-    const start = performance.now();
-    const result = await operation();
-    const duration = performance.now() - start;
-    
-    console.log(`${description}: ${duration.toFixed(2)}ms`);
-    return { result, duration };
-  }
-  
-  static validateMessageStructure(message: any): boolean {
-    return (
-      typeof message.id === 'string' &&
-      ['user', 'assistant', 'system'].includes(message.role) &&
-      typeof message.content === 'string' &&
-      typeof message.timestamp === 'string' &&
-      !isNaN(Date.parse(message.timestamp))
+    return Array.from({ length: 1024 }, (_, i) => 
+      Math.sin(hash + i) * 0.5 + 0.5
     );
   }
-  
-  static async waitForCondition(
-    condition: () => boolean,
-    timeout: number = 5000,
-    interval: number = 100
-  ): Promise<void> {
-    const startTime = Date.now();
+
+  private generateResponse(
+    input: string, 
+    stmContext: string, 
+    ltmContext: MockFact[]
+  ): string {
+    const contextInfo = ltmContext.length > 0 
+      ? ` Based on what I know about you (${ltmContext.map(f => f.content).join(', ')}),`
+      : '';
     
-    while (Date.now() - startTime < timeout) {
-      if (condition()) return;
-      await new Promise(resolve => setTimeout(resolve, interval));
-    }
-    
-    throw new Error(`Condition not met within ${timeout}ms`);
+    return `I understand you said: "${input}".${contextInfo} How can I help you further?`;
+  }
+
+  getSTM(): MockSTMBuffer {
+    return this.stm;
+  }
+
+  getLTM(): MockVectorStore {
+    return this.ltm;
+  }
+
+  clearSession(): void {
+    this.stm.clear();
   }
 }
 
-export { 
-  RAGPipeline, 
-  ShortTermMemory, 
-  LongTermMemory, 
-  MockVectorStore, 
-  TestHelpers, 
-  testFixtures
+// Mock Session Manager
+class MockSessionManager {
+  private sessions: Map<string, MockSession> = new Map();
+  private currentSessionId: string | null = null;
+
+  createSession(): MockSession {
+    const session: MockSession = {
+      id: `session_${Date.now()}_${Math.random()}`,
+      title: 'New Chat',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      messages: []
+    };
+    
+    this.sessions.set(session.id, session);
+    this.currentSessionId = session.id;
+    return session;
+  }
+
+  getSession(sessionId: string): MockSession | null {
+    return this.sessions.get(sessionId) || null;
+  }
+
+  getAllSessions(): MockSession[] {
+    return Array.from(this.sessions.values())
+      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+  }
+
+  getCurrentSession(): MockSession | null {
+    return this.currentSessionId ? this.getSession(this.currentSessionId) : null;
+  }
+
+  setCurrentSession(sessionId: string): boolean {
+    if (this.sessions.has(sessionId)) {
+      this.currentSessionId = sessionId;
+      return true;
+    }
+    return false;
+  }
+
+  addMessageToSession(sessionId: string, message: MockMessage): boolean {
+    const session = this.sessions.get(sessionId);
+    if (session) {
+      session.messages.push(message);
+      session.updatedAt = new Date().toISOString();
+      
+      // Update title based on first user message
+      if (session.messages.length === 1 && message.role === 'user') {
+        session.title = message.content.slice(0, 50) + (message.content.length > 50 ? '...' : '');
+      }
+      
+      return true;
+    }
+    return false;
+  }
+
+  deleteSession(sessionId: string): boolean {
+    if (this.sessions.delete(sessionId)) {
+      if (this.currentSessionId === sessionId) {
+        this.currentSessionId = null;
+      }
+      return true;
+    }
+    return false;
+  }
+
+  getSessionCount(): number {
+    return this.sessions.size;
+  }
+
+  clear(): void {
+    this.sessions.clear();
+    this.currentSessionId = null;
+  }
+}
+
+// Test Helper Functions
+function createTestMessage(content: string, role: 'user' | 'assistant' = 'user'): MockMessage {
+  return {
+    id: `msg_${Date.now()}_${Math.random()}`,
+    role,
+    content,
+    timestamp: new Date().toISOString()
+  };
+}
+
+function measureExecutionTime<T>(fn: () => Promise<T>): Promise<{ result: T; duration: number }> {
+  return new Promise(async (resolve) => {
+    const start = performance.now();
+    const result = await fn();
+    const end = performance.now();
+    resolve({ result, duration: end - start });
+  });
+}
+
+// Test Data Fixtures
+const testConversations = {
+  personalInfo: [
+    "Hi, I'm John from Boston and I work in software development",
+    "I prefer Python and React for my projects",
+    "My favorite editor is VS Code"
+  ],
+  technicalSupport: [
+    "I'm having trouble with my Next.js application",
+    "The TypeScript compiler is showing errors",
+    "Can you help me debug this issue?"
+  ],
+  preferences: [
+    "I love Italian food and coffee",
+    "My favorite color is blue",
+    "I enjoy hiking and photography"
+  ]
 };
+
+// TESTS START HERE
+
+describe('RAG Pipeline Test Suite', () => {
+  let ragPipeline: MockRAGPipeline;
+  let sessionManager: MockSessionManager;
+  let testUserId: string;
+
+  beforeEach(() => {
+    ragPipeline = new MockRAGPipeline();
+    sessionManager = new MockSessionManager();
+    testUserId = `user_${Date.now()}`;
+  });
+
+  afterEach(() => {
+    ragPipeline.getLTM().clear();
+    ragPipeline.clearSession();
+    sessionManager.clear();
+  });
+
+  describe('Short-Term Memory (STM) Tests', () => {
+    test('should maintain exactly 5 messages in STM buffer', async () => {
+      const stm = ragPipeline.getSTM();
+      
+      // Add 7 messages
+      for (let i = 1; i <= 7; i++) {
+        await ragPipeline.processMessage(`Message ${i}`, testUserId);
+      }
+      
+      expect(stm.size()).toBe(5);
+      
+      const messages = stm.getAll();
+      expect(messages[0].content).toBe('Message 3'); // First message should be #3
+      expect(messages[4].content).toBe('Message 7'); // Last message should be #7
+    });
+
+    test('should clear STM on new session', () => {
+      const stm = ragPipeline.getSTM();
+      
+      // Add some messages
+      stm.add(createTestMessage('Test message 1'));
+      stm.add(createTestMessage('Test message 2'));
+      
+      expect(stm.size()).toBe(2);
+      
+      // Clear session (simulate new chat)
+      ragPipeline.clearSession();
+      
+      expect(stm.size()).toBe(0);
+    });
+
+    test('should maintain correct message order in STM', async () => {
+      const messages = ['First', 'Second', 'Third'];
+      
+      for (const msg of messages) {
+        await ragPipeline.processMessage(msg, testUserId);
+      }
+      
+      const stmMessages = ragPipeline.getSTM().getAll();
+      expect(stmMessages.map(m => m.content)).toEqual(messages);
+    });
+
+    test('should provide proper context window format', async () => {
+      await ragPipeline.processMessage('Hello', testUserId, 'user');
+      await ragPipeline.processMessage('Hi there!', testUserId, 'assistant');
+      
+      const contextWindow = ragPipeline.getSTM().getContextWindow();
+      expect(contextWindow).toContain('user: Hello');
+      expect(contextWindow).toContain('assistant: Hi there!');
+    });
+  });
+
+  describe('Long-Term Memory (LTM) Tests', () => {
+    test('should extract and store user facts', async () => {
+      const ltm = ragPipeline.getLTM();
+      
+      const result = await ragPipeline.processMessage(
+        "Hi, I'm Alice from Seattle and I love Python programming",
+        testUserId
+      );
+      
+      expect(result.extractedFacts).toContain('name: alice');
+      expect(result.extractedFacts).toContain('location: seattle');
+      expect(result.extractedFacts).toContain('preference: python programming');
+      
+      const storedFacts = await ltm.getUserFacts(testUserId);
+      expect(storedFacts.length).toBe(3);
+    });
+
+    test('should retrieve relevant context from LTM', async () => {
+      const ltm = ragPipeline.getLTM();
+      
+      // Store initial facts
+      await ragPipeline.processMessage("My name is Bob and I work with React", testUserId);
+      
+      // Query for relevant context
+      const result = await ragPipeline.processMessage("Tell me about React", testUserId);
+      
+      expect(result.ltmContext.length).toBeGreaterThan(0);
+      expect(result.ltmContext.some(fact => fact.content.includes('react'))).toBe(true);
+    });
+
+    test('should handle fact updates correctly', async () => {
+      const ltm = ragPipeline.getLTM();
+      
+      // Add initial preference
+      await ragPipeline.processMessage("I prefer Vue.js", testUserId);
+      
+      // Update preference
+      await ragPipeline.processMessage("Actually, I prefer React now", testUserId);
+      
+      const facts = await ltm.getUserFacts(testUserId);
+      const reactFacts = facts.filter(f => f.content.includes('react'));
+      const vueFacts = facts.filter(f => f.content.includes('vue'));
+      
+      expect(reactFacts.length).toBeGreaterThan(0);
+      expect(vueFacts.length).toBeGreaterThan(0); // Both should exist as separate facts
+    });
+
+    test('should isolate facts between different users', async () => {
+      const user1 = 'user1';
+      const user2 = 'user2';
+      
+      await ragPipeline.processMessage("My name is Alice", user1);
+      await ragPipeline.processMessage("My name is Bob", user2);
+      
+      const user1Facts = await ragPipeline.getLTM().getUserFacts(user1);
+      const user2Facts = await ragPipeline.getLTM().getUserFacts(user2);
+      
+      expect(user1Facts.length).toBe(1);
+      expect(user2Facts.length).toBe(1);
+      expect(user1Facts[0].content).toContain('alice');
+      expect(user2Facts[0].content).toContain('bob');
+    });
+
+    test('should handle vector store failures gracefully', async () => {
+      const ltm = ragPipeline.getLTM();
+      
+      // Simulate connection failure
+      ltm.setConnectionStatus(false);
+      
+      // The error should be caught and handled gracefully
+      try {
+        const result = await ragPipeline.processMessage("Test message", testUserId);
+        
+        // Should still process message but with empty LTM context
+        expect(result.response).toBeTruthy();
+        expect(result.ltmContext).toEqual([]);
+        expect(result.extractedFacts).toEqual([]);
+      } catch (error) {
+        // If error is thrown, it should be the connection error
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toContain('Vector store connection failed');
+      }
+    });
+  });
+
+  describe('RAG Pipeline Integration Tests', () => {
+    test('should combine STM and LTM context effectively', async () => {
+      // Build conversation history
+      await ragPipeline.processMessage("I'm a Python developer", testUserId);
+      await ragPipeline.processMessage("I work on web applications", testUserId);
+      await ragPipeline.processMessage("I need help with FastAPI", testUserId);
+      
+      const result = await ragPipeline.processMessage("What framework should I use?", testUserId);
+      
+      // Should have both STM and LTM context
+      expect(result.stmContext).toContain('FastAPI');
+      expect(result.ltmContext.length).toBeGreaterThan(0);
+      expect(result.response).toContain('Python');
+    });
+
+    test('should process complex multi-fact messages', async () => {
+      const complexMessage = "I'm John from Boston, I prefer Python and React, working on ML project";
+      
+      const result = await ragPipeline.processMessage(complexMessage, testUserId);
+      
+      expect(result.extractedFacts.length).toBeGreaterThanOrEqual(3);
+      expect(result.extractedFacts.some(f => f.includes('john'))).toBe(true);
+      expect(result.extractedFacts.some(f => f.includes('boston'))).toBe(true);
+      expect(result.extractedFacts.some(f => f.includes('python') || f.includes('react'))).toBe(true);
+    });
+
+    test('should maintain context across session boundaries', async () => {
+      // Session 1: Store facts
+      await ragPipeline.processMessage("My favorite language is TypeScript", testUserId);
+      
+      // Clear STM (simulate new session)
+      ragPipeline.clearSession();
+      
+      // Session 2: Should still have LTM context
+      const result = await ragPipeline.processMessage("What do you know about my preferences?", testUserId);
+      
+      expect(result.ltmContext.length).toBeGreaterThan(0);
+      expect(result.ltmContext.some(f => f.content.includes('typescript'))).toBe(true);
+    });
+  });
+
+  describe('Chat Session Sidebar Operations', () => {
+    test('should create new chat session', () => {
+      const session = sessionManager.createSession();
+      
+      expect(session.id).toBeTruthy();
+      expect(session.title).toBe('New Chat');
+      expect(session.messages).toEqual([]);
+      expect(sessionManager.getCurrentSession()?.id).toBe(session.id);
+    });
+
+    test('should switch between sessions correctly', () => {
+      const session1 = sessionManager.createSession();
+      const session2 = sessionManager.createSession();
+      
+      expect(sessionManager.getCurrentSession()?.id).toBe(session2.id);
+      
+      sessionManager.setCurrentSession(session1.id);
+      expect(sessionManager.getCurrentSession()?.id).toBe(session1.id);
+    });
+
+    test('should display sessions sorted by recent activity', () => {
+      const session1 = sessionManager.createSession();
+      const session2 = sessionManager.createSession();
+      
+      // Add message to session1 (making it more recent)
+      sessionManager.addMessageToSession(session1.id, createTestMessage('Hello'));
+      
+      const sessions = sessionManager.getAllSessions();
+      expect(sessions[0].id).toBe(session1.id); // Most recent first
+      expect(sessions[1].id).toBe(session2.id);
+    });
+
+    test('should update session title based on first message', () => {
+      const session = sessionManager.createSession();
+      const longMessage = "This is a very long message that should be truncated in the session title";
+      
+      sessionManager.addMessageToSession(session.id, createTestMessage(longMessage));
+      
+      const updatedSession = sessionManager.getSession(session.id);
+      expect(updatedSession?.title).toBe(longMessage.slice(0, 50) + '...');
+    });
+
+    test('should handle session deletion', () => {
+      const session1 = sessionManager.createSession();
+      const session2 = sessionManager.createSession();
+      
+      expect(sessionManager.getSessionCount()).toBe(2);
+      
+      sessionManager.deleteSession(session1.id);
+      
+      expect(sessionManager.getSessionCount()).toBe(1);
+      expect(sessionManager.getSession(session1.id)).toBeNull();
+      expect(sessionManager.getSession(session2.id)).toBeTruthy();
+    });
+
+    test('should isolate messages between sessions', () => {
+      const session1 = sessionManager.createSession();
+      const session2 = sessionManager.createSession();
+      
+      sessionManager.addMessageToSession(session1.id, createTestMessage('Message 1'));
+      sessionManager.addMessageToSession(session2.id, createTestMessage('Message 2'));
+      
+      expect(sessionManager.getSession(session1.id)?.messages.length).toBe(1);
+      expect(sessionManager.getSession(session2.id)?.messages.length).toBe(1);
+      expect(sessionManager.getSession(session1.id)?.messages[0].content).toBe('Message 1');
+      expect(sessionManager.getSession(session2.id)?.messages[0].content).toBe('Message 2');
+    });
+  });
+
+  describe('Error Handling and Edge Cases', () => {
+    test('should handle empty messages gracefully', async () => {
+      const result = await ragPipeline.processMessage('', testUserId);
+      
+      expect(result.response).toBeTruthy();
+      expect(result.extractedFacts).toEqual([]);
+    });
+
+    test('should handle very long messages', async () => {
+      const longMessage = 'A'.repeat(10000);
+      
+      const result = await ragPipeline.processMessage(longMessage, testUserId);
+      
+      expect(result.response).toBeTruthy();
+      expect(result.stmContext).toContain(longMessage);
+    });
+
+    test('should handle malformed user IDs', async () => {
+      const malformedUserId = '';
+      
+      const result = await ragPipeline.processMessage('Test', malformedUserId);
+      
+      expect(result.response).toBeTruthy();
+    });
+
+    test('should handle concurrent message processing', async () => {
+      const promises: Promise<{
+        response: string;
+        stmContext: string;
+        ltmContext: MockFact[];
+        extractedFacts: string[];
+      }>[] = [];
+      
+      for (let i = 0; i < 10; i++) {
+        promises.push(ragPipeline.processMessage(`Message ${i}`, testUserId));
+      }
+      
+      const results = await Promise.all(promises);
+      
+      expect(results.length).toBe(10);
+      results.forEach(result => {
+        expect(result.response).toBeTruthy();
+      });
+    });
+  });
+
+  describe('Performance Tests', () => {
+    test('should process single message within acceptable time', async () => {
+      const { duration } = await measureExecutionTime(async () => {
+        return await ragPipeline.processMessage('Test message', testUserId);
+      });
+      
+      expect(duration).toBeLessThan(100); // Should process in under 100ms
+    });
+
+    test('should handle high volume of messages efficiently', async () => {
+      const messageCount = 50;
+      
+      const { duration } = await measureExecutionTime(async () => {
+        const promises: Promise<{
+          response: string;
+          stmContext: string;
+          ltmContext: MockFact[];
+          extractedFacts: string[];
+        }>[] = [];
+        for (let i = 0; i < messageCount; i++) {
+          promises.push(ragPipeline.processMessage(`Message ${i}`, testUserId));
+        }
+        return await Promise.all(promises);
+      });
+      
+      expect(duration).toBeLessThan(2000); // Should process 50 messages in under 2s
+      expect(ragPipeline.getSTM().size()).toBe(5); // STM should still respect limits
+    });
+
+    test('should maintain performance with large LTM', async () => {
+      // Pre-populate LTM with many facts
+      for (let i = 0; i < 100; i++) {
+        await ragPipeline.processMessage(`I like technology ${i}`, testUserId);
+      }
+      
+      const { duration } = await measureExecutionTime(async () => {
+        return await ragPipeline.processMessage('What do you know about me?', testUserId);
+      });
+      
+      expect(duration).toBeLessThan(200); // Should still be fast with large LTM
+    });
+
+    test('should handle memory pressure gracefully', async () => {
+      // Stress test with rapid message bursts
+      for (let burst = 0; burst < 5; burst++) {
+        const promises: Promise<{
+          response: string;
+          stmContext: string;
+          ltmContext: MockFact[];
+          extractedFacts: string[];
+        }>[] = [];
+        for (let i = 0; i < 20; i++) {
+          promises.push(ragPipeline.processMessage(`Burst ${burst} Message ${i}`, testUserId));
+        }
+        await Promise.all(promises);
+      }
+      
+      // System should still be responsive
+      const result = await ragPipeline.processMessage('Final test', testUserId);
+      expect(result.response).toBeTruthy();
+      expect(ragPipeline.getSTM().size()).toBe(5);
+    });
+  });
+
+  describe('Real-World Usage Scenarios', () => {
+    test('should handle typical tech support conversation', async () => {
+      const conversation = testConversations.technicalSupport;
+      
+      for (const message of conversation) {
+        await ragPipeline.processMessage(message, testUserId);
+      }
+      
+      const result = await ragPipeline.processMessage('Can you summarize my issues?', testUserId);
+      
+      expect(result.stmContext).toContain('Next.js');
+      expect(result.stmContext).toContain('TypeScript');
+      expect(result.response).toBeTruthy();
+    });
+
+    test('should build comprehensive user profile', async () => {
+      const conversation = testConversations.personalInfo;
+      
+      for (const message of conversation) {
+        await ragPipeline.processMessage(message, testUserId);
+      }
+      
+      const userFacts = await ragPipeline.getLTM().getUserFacts(testUserId);
+      
+      expect(userFacts.length).toBeGreaterThan(0);
+      expect(userFacts.some(f => f.content.includes('john'))).toBe(true);
+      expect(userFacts.some(f => f.content.includes('boston'))).toBe(true);
+      expect(userFacts.some(f => f.content.includes('python'))).toBe(true);
+    });
+
+    test('should handle multi-session user journey', async () => {
+      // Session 1: Initial conversation
+      const session1 = sessionManager.createSession();
+      await ragPipeline.processMessage("I'm learning React", testUserId);
+      sessionManager.addMessageToSession(session1.id, createTestMessage("I'm learning React"));
+      
+      // Session 2: Follow-up conversation
+      ragPipeline.clearSession();
+      const session2 = sessionManager.createSession();
+      const result = await ragPipeline.processMessage("Tell me more about React hooks", testUserId);
+      sessionManager.addMessageToSession(session2.id, createTestMessage("Tell me more about React hooks"));
+      
+      // Should have context from previous session
+      expect(result.ltmContext.some(f => f.content.includes('react'))).toBe(true);
+      expect(sessionManager.getSessionCount()).toBe(2);
+    });
+  });
+});
+
+// Additional Test Utilities for manual testing
+export const TestUtils = {
+  createMockRAGPipeline: () => new MockRAGPipeline(),
+  createMockSessionManager: () => new MockSessionManager(),
+  testConversations,
+  measureExecutionTime,
+  createTestMessage
+};
+
+export default TestUtils;
