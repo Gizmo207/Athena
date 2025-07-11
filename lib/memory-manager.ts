@@ -155,10 +155,19 @@ export class AthenaMemoryManager {
         maxTokens: 500,
       });
 
-      // Parse the JSON response
+      // Parse the JSON response (handle markdown code blocks)
       let extractedFacts: any[] = [];
       try {
-        extractedFacts = JSON.parse(response);
+        let jsonString = response.trim();
+        
+        // Remove markdown code blocks if present
+        if (jsonString.startsWith('```json')) {
+          jsonString = jsonString.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+        } else if (jsonString.startsWith('```')) {
+          jsonString = jsonString.replace(/^```\s*/, '').replace(/\s*```$/, '');
+        }
+        
+        extractedFacts = JSON.parse(jsonString);
       } catch (parseError) {
         console.warn('⚠️ Failed to parse fact extraction response:', response);
         return [];
