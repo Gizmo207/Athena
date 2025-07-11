@@ -135,20 +135,61 @@ export default function Home() {
       setCurrentSession(updatedSession);
     }
 
-    try {
-      const res = await fetch("/api/athena-mistral", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: userText,
-          shortTermBuffer: newSTM,
-          userId: session?.id || sessionId,
-        }),
-      });
-      if (!res.ok) {
-        throw new Error(`HTTP error! status: ${res.status}`);
+    // Retry mechanism for API calls
+    const makeApiRequest = async (requestData: any, retries = 3): Promise<any> => {
+      for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+          const res = await fetch("/api/athena-mistral", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(requestData),
+          });
+          
+          if (!res.ok) {
+            // Try to parse error details
+            try {
+              const errorData = await res.json();
+              console.error(`API Error Details (attempt ${attempt}):`, errorData);
+              
+              // Don't retry on 4xx errors (client errors)
+              if (res.status >= 400 && res.status < 500 && attempt === 1) {
+                throw new Error(`API Error (${res.status}): ${errorData.error || errorData.message || 'Client error'}`);
+              }
+              
+              if (attempt === retries) {
+                throw new Error(`API Error (${res.status}): ${errorData.error || errorData.message || 'Unknown error'}`);
+              }
+            } catch (parseError) {
+              // If JSON parsing fails, use status text
+              if (attempt === retries) {
+                throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+              }
+            }
+            
+            // Wait before retry (exponential backoff)
+            await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt - 1) * 1000));
+            continue;
+          }
+          
+          return await res.json();
+        } catch (error) {
+          if (attempt === retries) {
+            throw error;
+          }
+          
+          console.warn(`API request attempt ${attempt} failed:`, error);
+          // Wait before retry
+          await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt - 1) * 1000));
+        }
       }
-      const data = await res.json();
+    };
+
+    try {
+      const data = await makeApiRequest({
+        message: userText,
+        shortTermBuffer: newSTM,
+        userId: session?.id || sessionId,
+      });
       
       // Update STM buffer with server response
       if (data.shortTermBuffer) {
@@ -180,11 +221,26 @@ export default function Home() {
         (window as any).updateAthenaSession(agentMsg.message);
       }
     } catch (e) {
-      console.error("Error:", e);
+      console.error("Error in handleSend:", e);
+      
+      // Create more informative error message based on error type
+      let errorMessage = "I'm having trouble connecting to the AI service right now. Please try again in a moment.";
+      
+      if (e instanceof Error) {
+        if (e.message.includes('404')) {
+          errorMessage = "The AI service endpoint is not available. Please check if the server is running.";
+        } else if (e.message.includes('500')) {
+          errorMessage = "The AI service encountered an internal error. Please try again.";
+        } else if (e.message.includes('timeout') || e.message.includes('network')) {
+          errorMessage = "Network connection issue detected. Please check your connection and try again.";
+        } else if (e.message.includes('API Error')) {
+          errorMessage = `AI Service Error: ${e.message.split(': ')[1] || 'Unknown error'}`;
+        }
+      }
+      
       const errorMsg = {
         id: messageId.current++,
-        message:
-          "I'm having trouble connecting to the AI service right now. Please try again in a moment.",
+        message: errorMessage,
         sender: "agent" as const,
         useTypewriter: true, // Enable typewriter for error messages too
       };

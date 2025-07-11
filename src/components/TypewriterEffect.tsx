@@ -40,41 +40,15 @@ export const TypewriterEffect: React.FC<TypewriterEffectProps> = ({
     }
   }, [autoScroll]);
   
-  const startTyping = useCallback(() => {
-    if (isComplete || !processedContentRef.current) return;
+  useEffect(() => {
+    // Process content when it changes
+    const processed = stripMarkdown 
+      ? MessageProcessor.stripMarkdown(content)
+      : content;
     
-    setIsTyping(true);
-    const charInterval = 1000 / speed; // milliseconds per character
+    processedContentRef.current = processed;
     
-    intervalRef.current = setInterval(() => {
-      if (currentIndexRef.current >= processedContentRef.current.length) {
-        if (intervalRef.current) {
-          clearInterval(intervalRef.current);
-          intervalRef.current = null;
-        }
-        setIsTyping(false);
-        setIsComplete(true);
-        onComplete?.();
-        return;
-      }
-      
-      // Type multiple characters at once for faster feel
-      const charsToAdd = Math.min(
-        Math.ceil(speed / 15), // Adaptive chunk size based on speed
-        processedContentRef.current.length - currentIndexRef.current
-      );
-      
-      currentIndexRef.current += charsToAdd;
-      setDisplayedContent(processedContentRef.current.slice(0, currentIndexRef.current));
-      
-      // Auto-scroll every few characters
-      if (currentIndexRef.current % 10 === 0) {
-        scrollToBottom();
-      }
-    }, charInterval);
-  }, [speed, onComplete, scrollToBottom, isComplete]);
-  
-  const resetTyping = useCallback(() => {
+    // Reset typing state
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
@@ -84,23 +58,47 @@ export const TypewriterEffect: React.FC<TypewriterEffectProps> = ({
     setDisplayedContent('');
     setIsTyping(false);
     setIsComplete(false);
-  }, []);
-  
-  useEffect(() => {
-    // Process content when it changes
-    const processed = stripMarkdown 
-      ? MessageProcessor.stripMarkdown(content)
-      : content;
     
-    processedContentRef.current = processed;
+    // Define startTyping inside useEffect to avoid stale closures
+    const startTypingNow = () => {
+      if (!processedContentRef.current) return;
+      
+      setIsTyping(true);
+      const charInterval = 1000 / speed; // milliseconds per character
+      
+      intervalRef.current = setInterval(() => {
+        if (currentIndexRef.current >= processedContentRef.current.length) {
+          if (intervalRef.current) {
+            clearInterval(intervalRef.current);
+            intervalRef.current = null;
+          }
+          setIsTyping(false);
+          setIsComplete(true);
+          onComplete?.();
+          return;
+        }
+        
+        // Type multiple characters at once for faster feel
+        const charsToAdd = Math.min(
+          Math.ceil(speed / 15), // Adaptive chunk size based on speed
+          processedContentRef.current.length - currentIndexRef.current
+        );
+        
+        currentIndexRef.current += charsToAdd;
+        setDisplayedContent(processedContentRef.current.slice(0, currentIndexRef.current));
+        
+        // Auto-scroll every few characters
+        if (currentIndexRef.current % 10 === 0) {
+          scrollToBottom();
+        }
+      }, charInterval);
+    };
     
-    // Reset and start typing
-    resetTyping();
-    
+    // Start typing with optional delay
     if (startDelay > 0) {
-      setTimeout(startTyping, startDelay);
+      setTimeout(startTypingNow, startDelay);
     } else {
-      startTyping();
+      startTypingNow();
     }
     
     return () => {
@@ -108,7 +106,7 @@ export const TypewriterEffect: React.FC<TypewriterEffectProps> = ({
         clearInterval(intervalRef.current);
       }
     };
-  }, [content, stripMarkdown, startTyping, resetTyping, startDelay]);
+  }, [content, stripMarkdown, startDelay, speed, onComplete, scrollToBottom]); // Include all dependencies
   
   useEffect(() => {
     // Auto-scroll when content updates
@@ -119,13 +117,18 @@ export const TypewriterEffect: React.FC<TypewriterEffectProps> = ({
   
   const skipTyping = useCallback(() => {
     if (isTyping && !isComplete) {
-      resetTyping();
+      // Directly reset without calling resetTyping to avoid dependency cycle
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+      
       setDisplayedContent(processedContentRef.current);
       setIsComplete(true);
       setIsTyping(false);
       onComplete?.();
     }
-  }, [isTyping, isComplete, resetTyping, onComplete]);
+  }, [isTyping, isComplete, onComplete]);
   
   return (
     <div 
